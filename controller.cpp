@@ -3,7 +3,11 @@
 #include "constants.h"
 #include "fstream"
 #include "iostream"
-#include "sstream"
+
+int Controller::N;
+std::vector<int> Controller::listen_port_;
+std::vector<int> Controller::send_port_;
+std::map<int, int> Controller::send_port_pid_map_;
 
 void Controller::set_coordinator(int coordinator_id) {
     coordinator_ = coordinator_id;
@@ -13,6 +17,22 @@ int Controller::get_coordinator() {
     return coordinator_;
 }
 
+int Controller::get_listen_port(int process_id) {
+    return listen_port_[process_id];
+}
+
+int Controller::get_send_port(int process_id) {
+    return send_port_[process_id];
+}
+
+int Controller::get_send_port_pid_map(int port_num) {
+    return send_port_pid_map_[port_num];
+}
+
+// reads the config file
+// sets value of N
+// adds port values to listen_port_ and send_port_
+// constructs send_port_pid_map_
 bool Controller::ReadConfigFile()
 {
     ifstream fin;
@@ -21,6 +41,7 @@ bool Controller::ReadConfigFile()
         fin.open(kConfigFile.c_str());
         fin >> N;
         int port;
+        cout << "N=" << N << endl;
         for (int i = 0; i < N; ++i) {
             fin >> port;
             listen_port_.push_back(port);
@@ -43,19 +64,23 @@ bool Controller::ReadConfigFile()
 
 bool Controller::CreateProcesses() {
     process_thread_.resize(N);
-    stringstream ss;
-
+    // creating N Process objects
+    process_.resize(N);
     for (int i = 0; i < N; i++) {
-        ss << i;
-        process_.push_back(Process(
-                               i,
-                               kLogFile + ss.str(),
-                               kPlaylistFile + ss.str()));
+        process_[i].Initialize(i, kLogFile + to_string(i), kPlaylistFile + to_string(i));
+        // process_[i].set_pid(i);
+        // process_[i].set_log_file(kLogFile + to_string(i));
+        // process_[i].set_playlist_file(kPlaylistFile + to_string(i));
+        // process_.push_back(Process(
+        //                        i,
+        //                        kLogFile + to_string(i),
+        //                        kPlaylistFile + to_string(i)));
         if (pthread_create(&process_thread_[i], NULL, ThreadEntry, (void *)&process_[i])) {
-            cout << "ERROR:unable to create thread for P" << i << endl;
+            cout << "C: ERROR: Unable to create thread for P" << i << endl;
             return false;
         }
     }
+    return true;
 }
 
 void Controller::WaitForThreadJoins() {
@@ -73,14 +98,5 @@ int main() {
     c.WaitForThreadJoins();
 
 
-
-//     pthread_t p;
-//     for (int i = 0; i < N; i++) {
-//         if (pthread_create(&p, NULL, some_func, (void *)P) {};
-//     }
-
-// if (rv) {
-//         cout << "ERROR:unable to create thread to run P" << i << endl;
-//         return 1;
-//     }
+    return 0;
 }

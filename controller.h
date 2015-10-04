@@ -1,7 +1,6 @@
 #ifndef CONTROLLER_H
 #define CONTROLLER_H
 
-#include "pthread.h"
 #include "vector"
 #include "string"
 #include "map"
@@ -14,18 +13,23 @@ public:
     bool ReadConfigFile();
     void WaitForThreadJoins();
     bool CreateProcesses();
+
     void set_coordinator(int coordinator_id);
     int get_coordinator();
+    int get_listen_port(int process_id);
+    int get_send_port_pid_map(int port_num);
+    int get_send_port(int process_id);
+
 
 protected:
-    int N;
+    static int N;
 
 private:
     // number of processes
-    std::vector<int> listen_port_;
-    std::vector<int> send_port_;
+    static std::vector<int> listen_port_;
+    static std::vector<int> send_port_;
     // maps send ports to PIDs
-    std::map<int, int> send_port_pid_map_;
+    static std::map<int, int> send_port_pid_map_;
     // Process object's pointer for each process
     std::vector<Process> process_;
     // vector of threads for each process
