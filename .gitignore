@@ -2,3 +2,5 @@
 *.out
 *.o
 *.obj
+controller
+ques.txt
