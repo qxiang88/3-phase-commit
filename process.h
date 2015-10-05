@@ -28,12 +28,19 @@ public:
 
     void AddToLog(string s, bool new_round = false);
     int GetCoordinator();
-    vector<int> GetParticipants();
+    void LoadParticipants();
     string GetVote();
     string GetDecision();
     bool CheckCoordinator();
     void LoadTransactionId();
     void LoadLog();
+
+    void LogCommit();
+    void LogPreCommit();
+    void LogAbort();
+    void LogYes();
+    void LogVoteReq();
+    void LogStart();
 
     vector<string> get_log();
     int get_pid();
@@ -55,13 +62,18 @@ private:
     int fd_max_;            // highest fd value currently in use
 
     map<int, vector<string> > log_;
-    // vector<string> log_;
+    
+    bool am_coordinator_;
+    vector<int> participants_;
+
     // the coordinator which this process perceives
     // this is not same as the coordinator_ of Controller class
     // coordinator_ of controller class is the actual coordinator of the system
     // make sure to call Controller::set_coordinator() fn
     // everytime a process selects a new coordinator
     // so that the Controller always knows the coordinator ID
+    
+    //can there be votereq of new process while one 3PC ongoing?
     int my_coordinator_;
     int transaction_id_;
 

@@ -307,14 +307,14 @@ string Process::GetVote()
     return "";   
 }
 
-vector<int> Process::GetParticipants()
+void Process::LoadParticipants()
 {
     //assumes first entry in round will have participants. change if not
     string entry = log_[transaction_id_][0];
     
     vector<string> tokens = split(entry, ' ');
-
-    vector<int> rval;
+    
+    participants_.clear();
 
     if (CheckCoordinator())
     {
@@ -324,7 +324,7 @@ vector<int> Process::GetParticipants()
 
             for(vector<string>::iterator it=rv.begin(); it<rv.end(); it++)
             {
-                rval.push_back(atoi((*it).c_str()));
+                participants_.push_back(atoi((*it).c_str()));
             }
         }
     }
@@ -336,11 +336,10 @@ vector<int> Process::GetParticipants()
             vector<string> rv = split(tokens[2], ',');
             for(vector<string>::iterator it=rv.begin(); it<rv.end(); it++)
             {
-                rval.push_back(atoi((*it).c_str()));
+                participants_.push_back(atoi((*it).c_str()));
             }   
         }
     }
-    return rval;
 
 }
 
@@ -359,6 +358,72 @@ int Process::GetCoordinator()
     }
 }
 
+// void Process::Recovery()
+// {
+//     LoadLog();
+//     LoadTransactionId();
+//     if(CheckCoordinator())
+//     {
+//         am_coordinator_ = true;
+
+//         state = GetDecision()
+
+//     }
+// }
+
+//initial ones just to maintain uniformity. can be removed if want to handle string while calling
+void Process::LogCommit()
+{
+    AddToLog("commit");
+}
+
+void Process::LogPreCommit()
+{
+    AddToLog("precommit");
+}
+void Process::LogAbort()
+{
+    AddToLog("abort");
+}
+
+void Process::LogYes()
+{
+    AddToLog("yes");
+}
+
+void Process::LogVoteReq()
+{
+
+    string s = "votereq";
+    s+= " ";
+    s+= to_string(my_coordinator_);
+    s+=" ";
+
+    for(int i=0; i<participants_.size(); i++)
+    {   
+        if(i)
+            s+=",";
+        s+=to_string(participants_[i]);
+    }
+
+    AddToLog(s);
+}
+
+void Process::LogStart()
+{
+    string s = "start";
+    s+= " ";
+    for(int i=0; i<participants_.size(); i++)
+    {   
+        if(i)
+            s+=",";
+        s+=to_string(participants_[i]);
+    }
+    AddToLog(s);
+}
+
+
+
 vector<string> split(string s, char delimiter)
 {
     stringstream ss(s);
@@ -370,3 +435,4 @@ vector<string> split(string s, char delimiter)
     }
     return rval;
 }
+
