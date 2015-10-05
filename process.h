@@ -13,6 +13,7 @@ void* ThreadEntry(void *p);
 void* server(void* _p);
 int return_port_no(struct sockaddr *sa);
 void sigchld_handler(int s);
+vector<string> split(string s, char delimiter);
 
 class Process : public Controller {
 public:
@@ -25,9 +26,16 @@ public:
     void InitializeLocks();
     void UpdateTempFdSet();
 
+    void AddToLog(string s, bool new_round = false);
+    int GetCoordinator();
+    vector<int> GetParticipants();
+    string GetVote();
+    string GetDecision();
+    bool CheckCoordinator();
+    void LoadTransactionId();
+    void LoadLog();
 
-
-
+    vector<string> get_log();
     int get_pid();
     int get_fd(int process_id);
     void set_pid(int process_id);
@@ -46,6 +54,8 @@ private:
     fd_set temp_fds_;       // temp file descriptor set for select()
     int fd_max_;            // highest fd value currently in use
 
+    map<int, vector<string> > log_;
+    // vector<string> log_;
     // the coordinator which this process perceives
     // this is not same as the coordinator_ of Controller class
     // coordinator_ of controller class is the actual coordinator of the system
@@ -53,7 +63,9 @@ private:
     // everytime a process selects a new coordinator
     // so that the Controller always knows the coordinator ID
     int my_coordinator_;
+    int transaction_id_;
 
 };
+
 
 #endif //PROCESS_H

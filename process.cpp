@@ -1,6 +1,7 @@
 #include "process.h"
 #include "constants.h"
 #include "fstream"
+#include "sstream"
 #include "iostream"
 #include "unistd.h"
 #include <errno.h>
@@ -11,6 +12,8 @@ using namespace std;
 
 pthread_mutex_t fd_lock;
 pthread_mutex_t fd_set_lock;
+pthread_mutex_t log_lock;
+typedef unordered_map<string, vector<string> >::iterator it_map;
 
 void Process::Initialize(int pid, string log_file, string playlist_file) {
     pid_ = pid;
@@ -140,7 +143,13 @@ void Process::InitializeLocks() {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
         pthread_exit(NULL);
     }
+
+    if (pthread_mutex_init(&log_lock, NULL) != 0) {
+    cout << "P" << get_pid() << ": Mutex init failed" << endl;
+    pthread_exit(NULL);
+    }
 }
+
 
 void* ThreadEntry(void* _p) {
     Process *p = (Process *)_p;
@@ -150,6 +159,13 @@ void* ThreadEntry(void* _p) {
         cout << "P" << p->get_pid() << ": Exiting" << endl;
         pthread_exit(NULL);
     }
+
+    // pthread_t logger_thread;
+    // if (pthread_create(&logger_thread, NULL, p->AddToLog(), (void *)p)) {
+    //     cout << "P" << p->get_pid() << ": ERROR: Unable to create logger thread for P" << p->get_pid() << endl;
+    //     pthread_exit(NULL);
+    // }
+    
 
     pthread_t server_thread;
     if (pthread_create(&server_thread, NULL, server, (void *)p)) {
@@ -181,4 +197,176 @@ void* ThreadEntry(void* _p) {
     pthread_join(receive_thread, &status);
     pthread_join(server_thread, &status);
     pthread_exit(NULL);
+}
+
+void Process::AddToLog(string s, bool new_round)
+{
+    pthread_mutex_lock(&fd_lock);
+
+    if (new_round)
+    {
+        vector<string> new_trans_log;
+        new_trans_log.push_back(s);
+        log_[transaction_id_] = new_trans_log;
+
+        stringstream ss;
+        ss<<"TID: "<<to_string(transaction_id_)<<endl<<s;
+        s = ss.str();
+    }
+        
+    else
+        log_[transaction_id_].push_back(s);
+    
+
+    ofstream outfile(log_file_.c_str(), fstream::app);
+    if (outfile.is_open())
+        outfile<<s<<endl;
+    
+    else
+        cout<<"couldn't open"<<log_file_<<endl;
+
+    pthread_mutex_unlock(&fd_lock);
+    outfile.close();
+    return;
+}
+
+void Process::LoadLog()
+{
+    string line;
+    vector<string> trans_log;
+    int round_id;
+    ifstream myfile(log_file_);
+        if(myfile.is_open())
+        {   
+            while(getline(myfile,line))
+            {
+                if(line.empty())
+                    continue;
+
+                size_t found = line.find("TID:");
+                if (found!=string::npos)
+                {
+                    string id = line.substr(5);
+                    round_id = atoi(id.c_str());
+                }
+                else
+                {
+                    log_[round_id].push_back(line);
+                }
+            }
+            myfile.close();
+        }
+        else
+        {
+            cout<<"Failed to load log file"<<endl;
+        }
+}
+
+void Process::LoadTransactionId()
+{
+    if(!log_.empty())
+        transaction_id_ = log_.rbegin()->first;
+    else
+        cout<<"Error. Log empty"<<endl;
+}
+
+bool Process::CheckCoordinator()
+{
+    transaction_id_ = (log_.rbegin())->first;
+    size_t found = log_[transaction_id_][0].find("start");
+    if (found!=string::npos)
+        return true;
+    else
+        return false;
+}
+
+string Process::GetDecision()
+{
+    //null string means no decision
+    vector<string> cur_trans_log = log_[transaction_id_];
+    for(vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it!=cur_trans_log.rend(); ++it)
+    {
+        if((*it).compare("commit") || (*it).compare("abort") || (*it).compare("precommit"))
+            return *it;
+    }
+    return "";
+}
+
+string Process::GetVote()
+{
+    vector<string> cur_trans_log = log_[transaction_id_];
+    for(vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it!=cur_trans_log.rend(); ++it)
+    {
+        if((*it).compare("yes"))
+            return *it;
+
+        else if ((*it).compare("abort"))
+            return "abort";
+    }
+
+    return "";   
+}
+
+vector<int> Process::GetParticipants()
+{
+    //assumes first entry in round will have participants. change if not
+    string entry = log_[transaction_id_][0];
+    
+    vector<string> tokens = split(entry, ' ');
+
+    vector<int> rval;
+
+    if (CheckCoordinator())
+    {
+        if (tokens[0].compare("start"))
+        {
+            vector<string> rv = split(tokens[1], ',');
+
+            for(vector<string>::iterator it=rv.begin(); it<rv.end(); it++)
+            {
+                rval.push_back(atoi((*it).c_str()));
+            }
+        }
+    }
+
+    else
+    {
+        if(tokens[0].compare("votereq"))
+        {
+            vector<string> rv = split(tokens[2], ',');
+            for(vector<string>::iterator it=rv.begin(); it<rv.end(); it++)
+            {
+                rval.push_back(atoi((*it).c_str()));
+            }   
+        }
+    }
+    return rval;
+
+}
+
+int Process::GetCoordinator()
+{
+    if(CheckCoordinator())
+        return pid_;
+    else
+    {
+        string entry = log_[transaction_id_][0];
+        vector<string> tokens = split(entry, ' ');
+        if(tokens[0].compare("votereq"))
+        {
+            return atoi(tokens[1].c_str());            
+        }
+    }
+}
+
+vector<string> split(string s, char delimiter)
+{
+    stringstream ss(s);
+    string temp;
+    vector<string> rval;
+    while(getline(ss, temp, delimiter))
+    {
+        rval.push_back(temp);
+    }
+    return rval;
 }
