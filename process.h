@@ -16,6 +16,7 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg);
 void* ReceiveAckFromParticipant(void* _rcv_thread_arg);
 int return_port_no(struct sockaddr *sa);
 void sigchld_handler(int s);
+vector<string> split(string s, char delimiter);
 
 typedef enum
 {
@@ -55,9 +56,23 @@ public:
 
 
 
+    void AddToLog(string s, bool new_round = false);
+    int GetCoordinator();
+    void LoadParticipants();
+    string GetVote();
+    string GetDecision();
+    bool CheckCoordinator();
+    void LoadTransactionId();
+    void LoadLog();
 
+    void LogCommit();
+    void LogPreCommit();
+    void LogAbort();
+    void LogYes();
+    void LogVoteReq();
+    void LogStart();
 
-
+    vector<string> get_log();
     int get_pid();
     int get_fd(int process_id);
     void set_pid(int process_id);
@@ -82,19 +97,22 @@ private:
     std::vector<ProcessState> process_state_;
     ProcessState my_state_;     // processes self-state
 
-    // set of participant process ids
-    // to be used only by participants
-    std::unordered_set<int> participant_;
-
     // map of participant process ids and their state
     // to be used only by coordinator
     std::unordered_map<int, ProcessState> participant_state_map_;
+    map<int, vector<string> > log_;
+    
+    bool am_coordinator_;
+    vector<int> participants_;
+
     // the coordinator which this process perceives
     // this is not same as the coordinator_ of Controller class
     // coordinator_ of controller class is the actual coordinator of the system
     // make sure to call Controller::set_coordinator() fn
     // everytime a process selects a new coordinator
     // so that the Controller always knows the coordinator ID
+    
+    //can there be votereq of new process while one 3PC ongoing?
     int my_coordinator_;
     int transaction_id_;
 };
@@ -107,5 +125,6 @@ struct ReceiveThreadArgument
     int pid;
     int transaction_id;
 };
+
 
 #endif //PROCESS_H
