@@ -33,7 +33,8 @@ void sigchld_handler(int s) {
 }
 
 // function to initiate a connect() request to process _pid
-int Process::ConnectToProcess(int process_id) {
+// returns true if connection was successfull
+bool Process::ConnectToProcess(int process_id) {
     int sockfd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *clientinfo, *l;
 
@@ -103,7 +104,7 @@ int Process::ConnectToProcess(int process_id) {
     if ((rv = getaddrinfo(NULL, std::to_string(get_listen_port(process_id)).c_str(),
                           &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return 1;
+        return false;
     }
 
     // loop through all the results and connect to the first we can
@@ -119,7 +120,7 @@ int Process::ConnectToProcess(int process_id) {
     }
     if (l == NULL) {
         fprintf(stderr, "client: failed to connect\n");
-        return 2;
+        return false;
     }
     int outgoing_port = ntohs(return_port_no((struct sockaddr *)l->ai_addr));
     // cout << "P" << get_pid() << ": Client: connecting to " << outgoing_port << endl ;
@@ -128,10 +129,10 @@ int Process::ConnectToProcess(int process_id) {
     // {
     set_fd(process_id, sockfd);
     // add the new fd to the fd sets
-    AddToFdSet(sockfd);
+    // AddToFdSet(sockfd);
     // }
-
     cout << "P" << get_pid() << ": Initiating connection to P" << process_id << endl;
+    return true;
 }
 
 // function where process acts as server
@@ -218,7 +219,7 @@ void* server(void* _p) {
         // cout << "P" << p->get_pid() << ": Server: accepting connection from port" << incoming_port << endl;
         p->set_fd(process_id, new_fd);
         // add the new fd to the fd sets
-        p->AddToFdSet(new_fd);
+        // p->AddToFdSet(new_fd);
 
         // }
         cout << "P" << p->get_pid() << ": Server: accepting connection from P" << p->get_send_port_pid_map(incoming_port) << endl;

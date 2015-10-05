@@ -5,12 +5,18 @@
 #include "iostream"
 
 int Controller::N;
+int Controller::coordinator_;
 std::vector<int> Controller::listen_port_;
 std::vector<int> Controller::send_port_;
 std::map<int, int> Controller::send_port_pid_map_;
+std::vector<string> Controller::transaction_;
+
+pthread_mutex_t coordinator_lock;
 
 void Controller::set_coordinator(int coordinator_id) {
+    pthread_mutex_lock(&coordinator_lock);
     coordinator_ = coordinator_id;
+    pthread_mutex_unlock(&coordinator_lock);
 }
 
 int Controller::get_coordinator() {
@@ -41,7 +47,6 @@ bool Controller::ReadConfigFile()
         fin.open(kConfigFile.c_str());
         fin >> N;
         int port;
-        cout << "N=" << N << endl;
         for (int i = 0; i < N; ++i) {
             fin >> port;
             listen_port_.push_back(port);
@@ -90,9 +95,36 @@ void Controller::WaitForThreadJoins() {
     }
 }
 
+// transaction format (without quotes):
+// "ADD <songName> <songURL>"
+// "REMOVE <songName>"
+// "EDIT <songName> <newSongName> <newSongURL>"
+void Controller::CreateTransactions() {
+    transaction_.push_back(kAdd + " song3 http3");
+    transaction_.push_back(kRemove + " song01");
+    transaction_.push_back(kEdit + " song02 song55 http55");
+}
+
+// returns transaction string if transaction_id is valid
+// else returns the string "NULL"
+string Controller::get_transaction(int transaction_id) {
+    if(transaction_id < transaction_.size()) return transaction_[transaction_id];
+    else return "NULL";
+}
+
+bool InitializeLocks() {
+    if (pthread_mutex_init(&coordinator_lock, NULL) != 0) {
+        cout << "C: Mutex init failed" << endl;
+        return false;
+    }
+    return true;
+}
+
 int main() {
     Controller c;
+    if(!InitializeLocks()) return 1;
     if (!c.ReadConfigFile()) return 1;
+    c.CreateTransactions();
     if (!c.CreateProcesses()) return 1;
 
     c.WaitForThreadJoins();
