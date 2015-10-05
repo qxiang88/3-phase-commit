@@ -6,10 +6,10 @@ controller: controller.o process.o socket.o
 controller.o: controller.cpp controller.h constants.h process.h
 	g++ -std=c++0x -c controller.cpp 
 
-process.o: process.cpp process.h
+process.o: process.cpp controller.h constants.h process.h
 	g++ -std=c++0x -c process.cpp
 
-socket.o: socket.cpp
+socket.o: socket.cpp controller.h constants.h process.h
 	g++ -std=c++0x -c socket.cpp
 
 clean:

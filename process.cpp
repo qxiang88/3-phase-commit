@@ -113,7 +113,6 @@ void Process::ConstructVoteReq(string &msg) {
             msg = msg + " " + to_string(it->first);
         }
         msg = msg + " $";
-        cout << msg << endl;
     }
 }
 
@@ -123,7 +122,7 @@ void Process::SendVoteReqToAll(const string &msg) {
         // if ((it->first) == get_pid()) continue; // do not send to self
 
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending to process P" << (it->first) << endl;
+            cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
         }
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
@@ -153,7 +152,8 @@ void Process::WaitForVotes() {
 
     void* status;
     ReceivedMsgType* r;
-    for (int i = 0; i < n; ++i) {
+    i = 0;
+    for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         pthread_join(receive_thread[i], &status);
         r = (ReceivedMsgType*)status;
         if ((*r) == ERROR) {
@@ -161,14 +161,15 @@ void Process::WaitForVotes() {
             pthread_exit(NULL);
         } else if ((*r) == YES) {
             // if a participant votes yes, mark its state as UNCERTAIN
-            participant_state_map_[i] = UNCERTAIN;
+            it->second = UNCERTAIN;
         } else if ((*r) == NO) {
             // if a participant votes no, mark its state as ABORTED
-            participant_state_map_[i] = ABORTED;
+            it->second = ABORTED;
         } else if ((*r) == TIMEOUT) {
             // if a participant votes no, mark its state as PROCESSTIMEOUT
-            participant_state_map_[i] = PROCESSTIMEOUT;
+            it->second = PROCESSTIMEOUT;
         }
+        i++;
     }
 }
 
@@ -194,7 +195,8 @@ void Process::WaitForAck() {
 
     void* status;
     ReceivedMsgType* r;
-    for (int i = 0; i < n; ++i) {
+    i = 0;
+    for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         pthread_join(receive_thread[i], &status);
         r = (ReceivedMsgType*)status;
         if ((*r) == ERROR) {
@@ -207,6 +209,7 @@ void Process::WaitForAck() {
             // if a participant timedout in ACK, skip it
             // no need to do anything
         }
+        i++;
     }
 }
 
@@ -269,7 +272,7 @@ void Process::SendAbortToProcess(int process_id) {
     ConstructGeneralMsg(kAbort, transaction_id_, msg);
 
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to process P" << process_id << endl;
+        cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
     }
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << process_id << ": " << msg << endl;
@@ -284,7 +287,7 @@ void Process::SendPreCommitToAll() {
         // if ((it->first) == get_pid()) continue; // do not send to self
 
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending to process P" << (it->first) << endl;
+            cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
         }
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
@@ -300,7 +303,7 @@ void Process::SendCommitToAll() {
         // if ((it->first) == get_pid()) continue; // do not send to self
 
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending to process P" << (it->first) << endl;
+            cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
         }
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
@@ -338,10 +341,13 @@ void Process::CoordinatorMode() {
         }
     }
 
+    if (my_state_ == ABORTED)
+        abort = true;
+
     if (abort) {
         // send ABORT message to all participants which voted YES
         for (const auto& ps : participant_state_map_) {
-            if (ps.second == UNCERTAIN && ps.first != get_pid()) {
+            if (ps.second == UNCERTAIN) {
                 //TODO: make sure that transaction_id_ is handled correct after TODO at start of this fn
                 SendAbortToProcess(ps.first);
             }
@@ -419,7 +425,7 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
             }
         }
     }
-    cout << "P" << p->get_pid() << " Receive thread exiting for P" << pid << endl;
+    cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
     return &received_msg_type;
 }
 
@@ -477,7 +483,7 @@ void* ReceiveAckFromParticipant(void* _rcv_thread_arg) {
             }
         }
     }
-    cout << "P" << p->get_pid() << " Receive thread exiting for P" << pid << endl;
+    cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
     return &received_msg_type;
 }
 
@@ -488,8 +494,8 @@ void Process::InitializeLocks() {
     }
 
     if (pthread_mutex_init(&log_lock, NULL) != 0) {
-    cout << "P" << get_pid() << ": Mutex init failed" << endl;
-    pthread_exit(NULL);
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
     }
 }
 
@@ -511,7 +517,7 @@ void* ThreadEntry(void* _p) {
     //     cout << "P" << p->get_pid() << ": ERROR: Unable to create logger thread for P" << p->get_pid() << endl;
     //     pthread_exit(NULL);
     // }
-    
+
 
     pthread_t server_thread;
     if (pthread_create(&server_thread, NULL, server, (void *)p)) {
@@ -534,18 +540,18 @@ void* ThreadEntry(void* _p) {
     usleep(1000 * 1000);
 
 
-    // usleep(5000 * 1000);
-    // if (p->get_pid() != 0) {
-    //     string msg = "YES 0 $";
-    //     if (send(p->get_fd(0), msg.c_str(), msg.size(), 0) == -1)
-    //     {
-    //         cout << "P" << p->get_pid() << ": ERROR: sending to P0" << endl;
-    //         exit(1);
-    //     }
-    //     else {
-    //         cout << "P" << p->get_pid() << ": Msg sent to P0:" << msg << endl;
-    //     }
-    // }
+    usleep(5000 * 1000);
+    if (p->get_pid() != 0) {
+        string msg = "YES 0 $";
+        if (send(p->get_fd(0), msg.c_str(), msg.size(), 0) == -1)
+        {
+            cout << "P" << p->get_pid() << ": ERROR: sending to P0" << endl;
+            exit(1);
+        }
+        else {
+            cout << "P" << p->get_pid() << ": Msg sent to P0:" << msg << endl;
+        }
+    }
 
     void* status;
     // pthread_join(receive_thread, &status);
@@ -564,20 +570,20 @@ void Process::AddToLog(string s, bool new_round)
         log_[transaction_id_] = new_trans_log;
 
         stringstream ss;
-        ss<<"TID: "<<to_string(transaction_id_)<<endl<<s;
+        ss << "TID: " << to_string(transaction_id_) << endl << s;
         s = ss.str();
     }
-        
+
     else
         log_[transaction_id_].push_back(s);
-    
+
 
     ofstream outfile(log_file_.c_str(), fstream::app);
     if (outfile.is_open())
-        outfile<<s<<endl;
-    
+        outfile << s << endl;
+
     else
-        cout<<"couldn't open"<<log_file_<<endl;
+        cout << "couldn't open" << log_file_ << endl;
 
     pthread_mutex_unlock(&fd_lock);
     outfile.close();
@@ -590,45 +596,45 @@ void Process::LoadLog()
     vector<string> trans_log;
     int round_id;
     ifstream myfile(log_file_);
-        if(myfile.is_open())
-        {   
-            while(getline(myfile,line))
-            {
-                if(line.empty())
-                    continue;
-
-                size_t found = line.find("TID:");
-                if (found!=string::npos)
-                {
-                    string id = line.substr(5);
-                    round_id = atoi(id.c_str());
-                }
-                else
-                {
-                    log_[round_id].push_back(line);
-                }
-            }
-            myfile.close();
-        }
-        else
+    if (myfile.is_open())
+    {
+        while (getline(myfile, line))
         {
-            cout<<"Failed to load log file"<<endl;
+            if (line.empty())
+                continue;
+
+            size_t found = line.find("TID:");
+            if (found != string::npos)
+            {
+                string id = line.substr(5);
+                round_id = atoi(id.c_str());
+            }
+            else
+            {
+                log_[round_id].push_back(line);
+            }
         }
+        myfile.close();
+    }
+    else
+    {
+        cout << "Failed to load log file" << endl;
+    }
 }
 
 void Process::LoadTransactionId()
 {
-    if(!log_.empty())
+    if (!log_.empty())
         transaction_id_ = log_.rbegin()->first;
     else
-        cout<<"Error. Log empty"<<endl;
+        cout << "Error. Log empty" << endl;
 }
 
 bool Process::CheckCoordinator()
 {
     transaction_id_ = (log_.rbegin())->first;
     size_t found = log_[transaction_id_][0].find("start");
-    if (found!=string::npos)
+    if (found != string::npos)
         return true;
     else
         return false;
@@ -638,9 +644,9 @@ string Process::GetDecision()
 {
     //null string means no decision
     vector<string> cur_trans_log = log_[transaction_id_];
-    for(vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it!=cur_trans_log.rend(); ++it)
+    for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
     {
-        if((*it).compare("commit") || (*it).compare("abort") || (*it).compare("precommit"))
+        if ((*it).compare("commit") || (*it).compare("abort") || (*it).compare("precommit"))
             return *it;
     }
     return "";
@@ -649,25 +655,25 @@ string Process::GetDecision()
 string Process::GetVote()
 {
     vector<string> cur_trans_log = log_[transaction_id_];
-    for(vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it!=cur_trans_log.rend(); ++it)
+    for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
     {
-        if((*it).compare("yes"))
+        if ((*it).compare("yes"))
             return *it;
 
         else if ((*it).compare("abort"))
             return "abort";
     }
 
-    return "";   
+    return "";
 }
 
 void Process::LoadParticipants()
 {
     //assumes first entry in round will have participants. change if not
     string entry = log_[transaction_id_][0];
-    
+
     vector<string> tokens = split(entry, ' ');
-    
+
     participants_.clear();
 
     if (CheckCoordinator())
@@ -676,7 +682,7 @@ void Process::LoadParticipants()
         {
             vector<string> rv = split(tokens[1], ',');
 
-            for(vector<string>::iterator it=rv.begin(); it<rv.end(); it++)
+            for (vector<string>::iterator it = rv.begin(); it < rv.end(); it++)
             {
                 participants_.push_back(atoi((*it).c_str()));
             }
@@ -685,13 +691,13 @@ void Process::LoadParticipants()
 
     else
     {
-        if(tokens[0].compare("votereq"))
+        if (tokens[0].compare("votereq"))
         {
             vector<string> rv = split(tokens[2], ',');
-            for(vector<string>::iterator it=rv.begin(); it<rv.end(); it++)
+            for (vector<string>::iterator it = rv.begin(); it < rv.end(); it++)
             {
                 participants_.push_back(atoi((*it).c_str()));
-            }   
+            }
         }
     }
 
@@ -699,15 +705,15 @@ void Process::LoadParticipants()
 
 int Process::GetCoordinator()
 {
-    if(CheckCoordinator())
+    if (CheckCoordinator())
         return pid_;
     else
     {
         string entry = log_[transaction_id_][0];
         vector<string> tokens = split(entry, ' ');
-        if(tokens[0].compare("votereq"))
+        if (tokens[0].compare("votereq"))
         {
-            return atoi(tokens[1].c_str());            
+            return atoi(tokens[1].c_str());
         }
     }
 }
@@ -749,15 +755,15 @@ void Process::LogVoteReq()
 {
 
     string s = "votereq";
-    s+= " ";
-    s+= to_string(my_coordinator_);
-    s+=" ";
+    s += " ";
+    s += to_string(my_coordinator_);
+    s += " ";
 
-    for(int i=0; i<participants_.size(); i++)
-    {   
-        if(i)
-            s+=",";
-        s+=to_string(participants_[i]);
+    for (int i = 0; i < participants_.size(); i++)
+    {
+        if (i)
+            s += ",";
+        s += to_string(participants_[i]);
     }
 
     AddToLog(s);
@@ -766,12 +772,12 @@ void Process::LogVoteReq()
 void Process::LogStart()
 {
     string s = "start";
-    s+= " ";
-    for(int i=0; i<participants_.size(); i++)
-    {   
-        if(i)
-            s+=",";
-        s+=to_string(participants_[i]);
+    s += " ";
+    for (int i = 0; i < participants_.size(); i++)
+    {
+        if (i)
+            s += ",";
+        s += to_string(participants_[i]);
     }
     AddToLog(s);
 }
@@ -783,7 +789,7 @@ vector<string> split(string s, char delimiter)
     stringstream ss(s);
     string temp;
     vector<string> rval;
-    while(getline(ss, temp, delimiter))
+    while (getline(ss, temp, delimiter))
     {
         rval.push_back(temp);
     }
