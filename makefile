@@ -1,4 +1,4 @@
-all: controller
+all: controller cleanlog
 
 controller: controller.o process.o socket.o coordinator.o participant.o
 	g++ -std=c++0x -o controller controller.o process.o socket.o coordinator.o participant.o -pthread
@@ -20,3 +20,6 @@ participant.o: participant.cpp process.cpp controller.h constants.h process.h
 
 clean:
 	rm -f *.o controller
+
+cleanlog:
+	rm -f log/*

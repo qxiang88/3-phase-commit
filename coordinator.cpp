@@ -198,7 +198,7 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
             received_msg_type = ERROR;
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
+            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;        
             // if participant closes connection, it is equivalent to it crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
@@ -308,6 +308,7 @@ void Process::CoordinatorMode() {
     string msg;
     ConstructVoteReq(msg);
     SendVoteReqToAll(msg);
+    LogStart();
     WaitForVotes();
 
     string trans = get_transaction(transaction_id_);
@@ -326,6 +327,7 @@ void Process::CoordinatorMode() {
         abort = true;
 
     if (abort) {
+        LogAbort();
         // send ABORT message to all participants which voted YES
         for (const auto& ps : participant_state_map_) {
             if (ps.second == UNCERTAIN) {
@@ -334,8 +336,10 @@ void Process::CoordinatorMode() {
             }
         }
     } else {
+        LogPreCommit();
         SendPreCommitToAll();
         WaitForAck();
+        LogCommit();
         SendCommitToAll();
     }
 }

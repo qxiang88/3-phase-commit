@@ -99,7 +99,7 @@ void Controller::WaitForThreadJoins() {
 // "REMOVE <songName>"
 // "EDIT <songName> <newSongName> <newSongURL>"
 void Controller::CreateTransactions() {
-    transaction_.push_back(kAdd + " song3 http3");
+    transaction_.push_back(kAdd + " song01 http11");
     transaction_.push_back(kRemove + " song01");
     transaction_.push_back(kEdit + " song02 song55 http55");
 }

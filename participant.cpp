@@ -257,26 +257,30 @@ void Process::ParticipantMode() {
         // TODO: check if special actions required
     }
     if (my_state_ == ABORTED) {
-        //TODO: write ABORT in log
+        //ignore log as doesnt matter when participant doesnt get votereq
+        return;
     }
+    
+    //else
+    LogVoteReq();
     Vote(transaction_msg);
     if (my_state_ ==  ABORTED) { //participant's vote was NO
         SendMsgToCoordinator(kNo);
-        //TODO: write ABORT in log
+        LogAbort();
     } else { //participant's vote was YES
-        //TODO: write YES in log
+        LogYes();
         SendMsgToCoordinator(kYes);
         ReceivePreCommitOrAbortFromCoordinator();
         if (my_state_ == COMMITTABLE) { // coord sent PRE-COMMIT
             SendMsgToCoordinator(kAck);
             ReceiveCommitFromCoordinator();
             if (my_state_ == COMMITTED) {
-                //TODO: write COMMIT in log
+                LogCommit();
             }
             // TODO: might need to check other values of my_state_
             // because of results of termination protocol
         } else if (my_state_ == ABORTED) { // coord sent ABORT
-            //TODO: write ABORT in log
+            LogAbort();
         }
     }
 }

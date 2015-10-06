@@ -17,7 +17,7 @@ pthread_mutex_t log_lock;
 
 void Process::Initialize(int pid, string log_file, string playlist_file) {
     pid_ = pid;
-    log_file_ = log_file_;
+    log_file_ = log_file;
     playlist_file_ = playlist_file;
     fd_.resize(N, -1);
     process_state_.resize(N, UNINITIALIZED);
@@ -244,7 +244,6 @@ void Process::AddToLog(string s, bool new_round)
     else
         log_[transaction_id_].push_back(s);
 
-
     ofstream outfile(log_file_.c_str(), fstream::app);
     if (outfile.is_open())
         outfile << s << endl;
@@ -435,7 +434,6 @@ void Process::ElectionProtocol()
 
 }
 
-
 //initial ones just to maintain uniformity. can be removed if want to handle string while calling
 void Process::LogCommit()
 {
@@ -479,14 +477,21 @@ void Process::LogStart()
 {
     string s = "start";
     s+= " ";
-    for ( auto it = participants_.begin(); it != participants_.end(); ++it )
+
+    // for (const auto& ps : participant_state_map_) {
+    //     if(&ps!=participant_state_map_.begin())
+    //         s+=",";
+    //     s+=to_string(ps.first);
+    // }
+
+    for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it )
     {   
-        if(it!=participants_.begin())
+        if(it!=participant_state_map_.begin())
             s+=",";
-        s+=to_string(*it);
+        s+=to_string(it->first);
     }
 
-    AddToLog(s);
+    AddToLog(s, true);
 }
 
 
