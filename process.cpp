@@ -723,7 +723,7 @@ void Process::Recovery()
     string decision = GetDecision();
 
     //probably need to send the decision to others
-    
+
     if(decision=="commit")
         my_state_ = COMMITTED;
 
@@ -756,6 +756,13 @@ void Process::TerminationProtocol()
 {
    
 }
+
+void Process::ElectionProtocol()
+{
+
+}
+
+
 //initial ones just to maintain uniformity. can be removed if want to handle string while calling
 void Process::LogCommit()
 {
