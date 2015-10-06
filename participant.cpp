@@ -66,7 +66,6 @@ bool Process::ExtractFromVoteReq(const string &msg, string &transaction_msg ) {
         participants_.push_back(id);
     }
     return ret;
-// cout << "ExtractedMsg:" << extracted_msg << " " << "Receivedtid:" << received_tid << endl;
 }
 
 // participant waits for VOTE-REQ from my_coordinator_
@@ -130,6 +129,9 @@ void Process::SendMsgToCoordinator(const string &msg_to_send) {
     }
 }
 
+// waits for PRE-COMMIT or ABORT from coordinator
+// on receipt, updates my_state_ variable
+// on timeout, initiates termination protocol
 void Process::ReceivePreCommitOrAbortFromCoordinator() {
     int pid = my_coordinator_;
     char buf[kMaxDataSize];
@@ -182,6 +184,8 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
     cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
 }
 
+// Waits for COMMIT from coordinator
+// on timeout, initiates termination protocol
 void Process::ReceiveCommitFromCoordinator() {
     int pid = my_coordinator_;
     char buf[kMaxDataSize];
@@ -232,6 +236,8 @@ void Process::ReceiveCommitFromCoordinator() {
     cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
 }
 
+// Function for a process which behaves as a normal participant
+// normal participant means one who has not suffered a failure
 void Process::ParticipantMode() {
     usleep(kGeneralSleep); //sleep to make sure connections are established
     //TODO: find a better way to set coordinator

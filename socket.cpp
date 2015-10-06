@@ -14,8 +14,7 @@
 using namespace std;
 
 // get port number
-int return_port_no(struct sockaddr *sa)
-{
+int return_port_no(struct sockaddr *sa) {
     if (sa->sa_family == AF_INET) {
         return (((struct sockaddr_in*)sa)->sin_port);
     }

@@ -23,9 +23,6 @@ void Process::Initialize(int pid, string log_file, string playlist_file) {
     process_state_.resize(N, UNINITIALIZED);
     my_state_ = UNINITIALIZED;
     transaction_id_ = 0;
-    // clear the master fd set
-    // FD_ZERO(&master_fds_);
-
 }
 
 int Process::get_pid() {
@@ -75,6 +72,8 @@ void Process::Print() {
     cout << endl;
 }
 
+// reads the playlist file
+// loads it into playlist_ unordered map
 bool Process::LoadPlaylist() {
     ifstream fin;
     fin.exceptions ( ifstream::failbit | ifstream::badbit );
@@ -169,9 +168,9 @@ void Process::ExtractMsg(const string &received_msg, string &extracted_msg, int 
     std::istringstream iss(received_msg);
     iss >> extracted_msg;
     iss >> received_tid;
-    // cout << "ExtractedMsg:" << extracted_msg << " " << "Receivedtid:" << received_tid << endl;
 }
 
+// Initialize all locks
 void Process::InitializeLocks() {
     if (pthread_mutex_init(&fd_lock, NULL) != 0) {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
@@ -222,28 +221,7 @@ void* ThreadEntry(void* _p) {
         cout << "P" << p->get_pid() << ": Participant mode over" << endl;
     }
 
-    // if pid!=0, then it needs to connect only to coordinator
-    // by default, coordinator will be zero
-    // p->ConnectToProcess(0);
-    // sleep for 1 seconds to make sure all connections are set up
-    // usleep(1000 * 1000);
-
-
-    // usleep(5000 * 1000);
-    // if (p->get_pid() != 0) {
-    //     string msg = "YES 0 $";
-    //     if (send(p->get_fd(0), msg.c_str(), msg.size(), 0) == -1)
-    //     {
-    //         cout << "P" << p->get_pid() << ": ERROR: sending to P0" << endl;
-    //         exit(1);
-    //     }
-    //     else {
-    //         cout << "P" << p->get_pid() << ": Msg sent to P0:" << msg << endl;
-    //     }
-    // }
-
     void* status;
-    // pthread_join(receive_thread, &status);
     pthread_join(server_thread, &status);
     pthread_exit(NULL);
 }

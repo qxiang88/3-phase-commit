@@ -47,6 +47,9 @@ void Process::SendVoteReqToAll(const string &msg) {
     }
 }
 
+// coordinator waits for votes from all participants
+// creates one receive thread for each participant
+// sets state of each participant in participant_state_map_
 void Process::WaitForVotes() {
     int n = participant_state_map_.size();
     std::vector<pthread_t> receive_thread(n);
@@ -90,6 +93,9 @@ void Process::WaitForVotes() {
     }
 }
 
+// coordinator waits for ACK from each participant
+// creates one receive thread for each participant
+// ignores the timeout of ACK receipts
 void Process::WaitForAck() {
     int n = participant_state_map_.size();
     std::vector<pthread_t> receive_thread(n);
@@ -162,7 +168,8 @@ void Process::SendCommitToAll() {
     }
 }
 
-// thread for receiving message from processes
+// thread for receiving vote from ONE participant
+// sets the participant's state in participant_state_map_
 void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
     ReceiveThreadArgument *rcv_thread_arg = (ReceiveThreadArgument *)_rcv_thread_arg;
     int pid = rcv_thread_arg->pid;
@@ -222,7 +229,7 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
     return &received_msg_type;
 }
 
-// thread for receiving ACK messages from processes
+// thread for receiving ACK messages from ONE participant
 void* ReceiveAckFromParticipant(void* _rcv_thread_arg) {
     ReceiveThreadArgument *rcv_thread_arg = (ReceiveThreadArgument *)_rcv_thread_arg;
     int pid = rcv_thread_arg->pid;
@@ -280,6 +287,10 @@ void* ReceiveAckFromParticipant(void* _rcv_thread_arg) {
     return &received_msg_type;
 }
 
+// Function for a process which behaves as a normal coordinator
+// normal coordinator means one who has been elected by the Controller
+// and not suffered any failure
+// or the result of an election protocol
 void Process::CoordinatorMode() {
     //TODO: find a better way to set coordinator
     set_my_coordinator(0);

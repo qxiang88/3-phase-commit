@@ -15,10 +15,7 @@ const int kBacklog = 10;                // how many pending connections queue wi
 const string kAdd = "ADD";
 const string kRemove = "REMOVE";
 const string kEdit = "EDIT";
-// timeout for select call.
-// must be significantly less than the timeout for messages
-// so that temp_fds_ set is periodically updated
-// TODO: change its value
+// timeout for select call (receive timeout)
 const timeval kTimeout = {
     0,          // tv_sec
     2000 * 1000  //tv_usec (microsec)
@@ -32,4 +29,5 @@ const string kAck = "ACK";
 const string kAbort = "ABORT";
 const string kPreCommit = "PRE-COMMIT";
 const string kCommit = "COMMIT";
+
 #endif //CONSTANTS_H

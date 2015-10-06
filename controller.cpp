@@ -39,8 +39,7 @@ int Controller::get_send_port_pid_map(int port_num) {
 // sets value of N
 // adds port values to listen_port_ and send_port_
 // constructs send_port_pid_map_
-bool Controller::ReadConfigFile()
-{
+bool Controller::ReadConfigFile() {
     ifstream fin;
     fin.exceptions ( ifstream::failbit | ifstream::badbit );
     try {
@@ -108,7 +107,7 @@ void Controller::CreateTransactions() {
 // returns transaction string if transaction_id is valid
 // else returns the string "NULL"
 string Controller::get_transaction(int transaction_id) {
-    if(transaction_id < transaction_.size()) return transaction_[transaction_id];
+    if (transaction_id < transaction_.size()) return transaction_[transaction_id];
     else return "NULL";
 }
 
@@ -122,7 +121,7 @@ bool InitializeLocks() {
 
 int main() {
     Controller c;
-    if(!InitializeLocks()) return 1;
+    if (!InitializeLocks()) return 1;
     if (!c.ReadConfigFile()) return 1;
     c.CreateTransactions();
     if (!c.CreateProcesses()) return 1;
