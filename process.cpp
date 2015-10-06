@@ -46,10 +46,10 @@ void Process::set_playlist_file(string playlistfile) {
 
 void Process::set_fd(int process_id, int new_fd) {
     pthread_mutex_lock(&fd_lock);
-    // if (fd[process_id] == -1)
-    // {
-    fd_[process_id] = new_fd;
-    // }
+    if (fd_[process_id] == -1)
+    {
+        fd_[process_id] = new_fd;
+    }
     pthread_mutex_unlock(&fd_lock);
 }
 
@@ -209,34 +209,38 @@ void* ThreadEntry(void* _p) {
         cout << "P" << p->get_pid() << ": ERROR: Unable to create server thread for P" << p->get_pid() << endl;
         pthread_exit(NULL);
     }
-    // sleep for 3 seconds to make sure server is up and listening
-    usleep(1000 * 1000);
+    // sleep to make sure server is up and listening
+    usleep(kGeneralSleep);
 
     // if pid=0, then it is the coordinator
+    //TODO: find a better way to set coordinator
     if (p->get_pid() == 0) {
         p->CoordinatorMode();
-        cout << "Coord Over" << endl;
+        cout << "P" << p->get_pid() << ": Coordinator mode over" << endl;
+    } else {
+        p->ParticipantMode();
+        cout << "P" << p->get_pid() << ": Participant mode over" << endl;
     }
 
     // if pid!=0, then it needs to connect only to coordinator
     // by default, coordinator will be zero
     // p->ConnectToProcess(0);
     // sleep for 1 seconds to make sure all connections are set up
-    usleep(1000 * 1000);
+    // usleep(1000 * 1000);
 
 
-    usleep(5000 * 1000);
-    if (p->get_pid() != 0) {
-        string msg = "YES 0 $";
-        if (send(p->get_fd(0), msg.c_str(), msg.size(), 0) == -1)
-        {
-            cout << "P" << p->get_pid() << ": ERROR: sending to P0" << endl;
-            exit(1);
-        }
-        else {
-            cout << "P" << p->get_pid() << ": Msg sent to P0:" << msg << endl;
-        }
-    }
+    // usleep(5000 * 1000);
+    // if (p->get_pid() != 0) {
+    //     string msg = "YES 0 $";
+    //     if (send(p->get_fd(0), msg.c_str(), msg.size(), 0) == -1)
+    //     {
+    //         cout << "P" << p->get_pid() << ": ERROR: sending to P0" << endl;
+    //         exit(1);
+    //     }
+    //     else {
+    //         cout << "P" << p->get_pid() << ": Msg sent to P0:" << msg << endl;
+    //     }
+    // }
 
     void* status;
     // pthread_join(receive_thread, &status);

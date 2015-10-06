@@ -21,17 +21,10 @@ const string kEdit = "EDIT";
 // TODO: change its value
 const timeval kTimeout = {
     0,          // tv_sec
-    2000*1000    //tv_usec (microsec)
+    2000 * 1000  //tv_usec (microsec)
 };
 
-// sleep for the select loop
-// sleeps for some time after releasing the fd_set_lock
-// giving chance for AddToFdSet/RemoveFromFdSet to acquire it
-// and make changes
-// time in microsec
-// TODO: change its value
-const time_t kSelectSleep = 5000*1000;
-
+const time_t kGeneralSleep = 1000 * 1000;
 const string kVoteReq = "VOTE-REQ";
 const string kYes = "YES";
 const string kNo = "NO";

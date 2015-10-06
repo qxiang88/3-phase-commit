@@ -101,7 +101,7 @@ void Process::WaitForAck() {
         rcv_thread_arg[i]->p = this;
         rcv_thread_arg[i]->pid = it->first;
         rcv_thread_arg[i]->transaction_id = transaction_id_;
-        rcv_thread_arg[i]->expected_msg1 = kYes;
+        rcv_thread_arg[i]->expected_msg1 = kAck;
         rcv_thread_arg[i]->expected_msg2 = "NULL";
         if (pthread_create(&receive_thread[i], NULL, ReceiveAckFromParticipant, (void *)rcv_thread_arg[i])) {
             cout << "P" << get_pid() << ": ERROR: Unable to create receive thread for P" << get_pid() << endl;
@@ -281,6 +281,7 @@ void* ReceiveAckFromParticipant(void* _rcv_thread_arg) {
 }
 
 void Process::CoordinatorMode() {
+    //TODO: find a better way to set coordinator
     set_my_coordinator(0);
     //TODO: handle transaction IDs
     //TODO: increment it
