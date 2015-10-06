@@ -51,10 +51,8 @@ public:
     void WaitForAck();
     void SendCommitToAll();
 
-
-
-
-
+    void Recovery();
+    void TerminationProtocol();
 
     void AddToLog(string s, bool new_round = false);
     int GetCoordinator();
@@ -103,7 +101,7 @@ private:
     map<int, vector<string> > log_;
     
     bool am_coordinator_;
-    vector<int> participants_;
+    unordered_set<int> participants_;
 
     // the coordinator which this process perceives
     // this is not same as the coordinator_ of Controller class
