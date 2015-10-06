@@ -63,7 +63,7 @@ bool Process::ExtractFromVoteReq(const string &msg, string &transaction_msg ) {
     iss >> n;
     for (int i = 0; i < n; ++i) {
         iss >> id;
-        participants_.push_back(id);
+        participants_.insert(id);
     }
     return ret;
 }

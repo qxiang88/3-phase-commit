@@ -313,7 +313,7 @@ string Process::GetDecision()
     vector<string> cur_trans_log = log_[transaction_id_];
     for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
     {
-        if ((*it).compare("commit") || (*it).compare("abort") || (*it).compare("precommit"))
+        if(   (*it) == "commit" || (*it) == "abort" || (*it) == "precommit" )
             return *it;
     }
     return "";
@@ -324,11 +324,11 @@ string Process::GetVote()
     vector<string> cur_trans_log = log_[transaction_id_];
     for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
     {
-        if ((*it).compare("yes"))
+        if( (*it) == "yes" )
             return *it;
 
-        else if ((*it).compare("abort"))
-            return "abort";
+        // else if ( (*it) == "abort")
+        //     return *it;
     }
 
     return "";
@@ -345,26 +345,28 @@ void Process::LoadParticipants()
 
     if (CheckCoordinator())
     {
-        if (tokens[0].compare("start"))
+        if (tokens[0] == "start")
         {
             vector<string> rv = split(tokens[1], ',');
 
             for (vector<string>::iterator it = rv.begin(); it < rv.end(); it++)
             {
-                participants_.push_back(atoi((*it).c_str()));
+                participants_.insert(atoi((*it).c_str()));
             }
         }
     }
 
     else
     {
-        if (tokens[0].compare("votereq"))
+        if(tokens[0]=="votereq")
         {
             vector<string> rv = split(tokens[2], ',');
             for (vector<string>::iterator it = rv.begin(); it < rv.end(); it++)
             {
-                participants_.push_back(atoi((*it).c_str()));
-            }
+                participants_.insert(atoi((*it).c_str()));
+            }   
+
+            participants_.insert(atoi(tokens[1].c_str()));
         }
     }
 
@@ -378,25 +380,61 @@ int Process::GetCoordinator()
     {
         string entry = log_[transaction_id_][0];
         vector<string> tokens = split(entry, ' ');
-        if (tokens[0].compare("votereq"))
+        if(tokens[0]=="votereq")
         {
             return atoi(tokens[1].c_str());
         }
     }
 }
+//sets my_state_ accd to log and calls termination protocol
+void Process::Recovery()
+{
+    LoadLog();
+    LoadTransactionId();
+    LoadParticipants();
 
-// void Process::Recovery()
-// {
-//     LoadLog();
-//     LoadTransactionId();
-//     if(CheckCoordinator())
-//     {
-//         am_coordinator_ = true;
+    string decision = GetDecision();
 
-//         state = GetDecision()
+    //probably need to send the decision to others
 
-//     }
-// }
+    if(decision=="commit")
+        my_state_ = COMMITTED;
+
+    else if(decision=="abort")
+        my_state_ = ABORTED;
+
+    else if(decision=="precommit")
+    {
+        my_state_ = COMMITTABLE;
+        TerminationProtocol();
+    }
+
+    else
+    {   //no decision
+        string vote = GetVote();
+        if(vote=="yes")
+            {
+                my_state_ = UNCERTAIN;
+                TerminationProtocol();
+            }
+        else if (vote.empty())
+        {
+            my_state_ = ABORTED;
+        }
+    }
+}
+
+//handle total failure case here
+void Process::TerminationProtocol()
+{
+   
+}
+
+void Process::ElectionProtocol()
+{
+
+}
+
 
 //initial ones just to maintain uniformity. can be removed if want to handle string while calling
 void Process::LogCommit()
@@ -422,15 +460,16 @@ void Process::LogVoteReq()
 {
 
     string s = "votereq";
-    s += " ";
-    s += to_string(my_coordinator_);
-    s += " ";
+    s+= " ";
+    s+= to_string(my_coordinator_);
+    s+=" ";
 
-    for (int i = 0; i < participants_.size(); i++)
-    {
-        if (i)
-            s += ",";
-        s += to_string(participants_[i]);
+    // for(int i=0; i<participants_.size(); i++)
+    for ( auto it = participants_.begin(); it != participants_.end(); ++it )
+    {   
+        if(it!=participants_.begin())
+            s+=",";
+        s+=to_string(*it);
     }
 
     AddToLog(s);
@@ -439,13 +478,14 @@ void Process::LogVoteReq()
 void Process::LogStart()
 {
     string s = "start";
-    s += " ";
-    for (int i = 0; i < participants_.size(); i++)
-    {
-        if (i)
-            s += ",";
-        s += to_string(participants_[i]);
+    s+= " ";
+    for ( auto it = participants_.begin(); it != participants_.end(); ++it )
+    {   
+        if(it!=participants_.begin())
+            s+=",";
+        s+=to_string(*it);
     }
+
     AddToLog(s);
 }
 

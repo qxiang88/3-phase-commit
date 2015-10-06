@@ -58,10 +58,9 @@ public:
 
 
 
-
-
-
-
+    void Recovery();
+    void TerminationProtocol();
+    void ElectionProtocol();
 
     void AddToLog(string s, bool new_round = false);
     int GetCoordinator();
@@ -107,8 +106,9 @@ private:
     std::unordered_map<int, ProcessState> participant_state_map_;
     map<int, vector<string> > log_;
 
-    bool am_coordinator_;
-    vector<int> participants_;
+    // bool am_coordinator_;
+    unordered_set<int> participants_;
+    unordered_set<int> up_;
 
     // the coordinator which this process perceives
     // this is not same as the coordinator_ of Controller class
