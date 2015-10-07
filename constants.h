@@ -31,11 +31,16 @@ const timeval kTimeout = {
 
 const string kAlive = "ALIVE";
 const string kVoteReq = "VOTE-REQ";
+const string kStateReq = "STATE-REQ";
 const string kYes = "YES";
 const string kNo = "NO";
 const string kAck = "ACK";
 const string kAbort = "ABORT";
 const string kPreCommit = "PRE-COMMIT";
 const string kCommit = "COMMIT";
+
+// const string kCommitted = "COMMITTED";
+// const string kCommittable = "COMMITTABLE";
+// const string kAborted = "ABORTED";
 
 #endif //CONSTANTS_H

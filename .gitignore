@@ -4,3 +4,6 @@
 *.obj
 controller
 ques.txt
+log/*
+playlist/*
+samplelog.txt

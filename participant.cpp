@@ -11,8 +11,6 @@
 #include "sstream"
 using namespace std;
 
-extern ReceivedMsgType received_msg_type;
-
 // extracts the transaction msg from the VOTE-REQ
 // sets transaction_msg to the extracted transaction msg above
 // sets the transaction_id_ variable
@@ -151,6 +149,7 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
         pthread_exit(NULL);
     } else if (rv == 0) {   //timeout
+        //TODO: check if SR received
         //TODO: initiate election protocol
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
@@ -264,13 +263,13 @@ void Process::ParticipantMode() {
     set_my_coordinator(0);
 
     // connect to coordinator
-    if (!ConnectToProcess(my_coordinator_)) {
-        // unable to connect to coordinator
-        // TODO: handle this case
-        // TODO: start election protocol
-    }
+    // if (!ConnectToProcess(my_coordinator_)) {
+    //     my_coordinator_ = -1;
+    //     // unable to connect to coordinator
+    //     // (is it really required to )start election protocol
+    // }
 
-    // usleep(kGeneralSleep); //sleep to make sure connections are established
+    usleep(kGeneralSleep); //sleep to make sure connections are established
 
     string transaction_msg;
     if (!WaitForVoteReq(transaction_msg)) {
@@ -286,28 +285,54 @@ void Process::ParticipantMode() {
     }
 
     if (my_state_ == ABORTED) {
-        //TODO: write ABORT in log
+        //ignore log as doesnt matter when participant doesnt get votereq
+        return;
     }
+    
+    //else
+    LogVoteReq();
     Vote(transaction_msg);
     if (my_state_ ==  ABORTED) { //participant's vote was NO
         SendMsgToCoordinator(kNo);
-        //TODO: write ABORT in log
+        LogAbort();
     } else { //participant's vote was YES
-        //TODO: write YES in log
+        LogYes();
         SendMsgToCoordinator(kYes);
         ReceivePreCommitOrAbortFromCoordinator();
         if (my_state_ == COMMITTABLE) { // coord sent PRE-COMMIT
             SendMsgToCoordinator(kAck);
             ReceiveCommitFromCoordinator();
             if (my_state_ == COMMITTED) {
-                //TODO: write COMMIT in log
+                LogCommit();
             }
             // TODO: might need to check other values of my_state_
             // because of results of termination protocol
         } else if (my_state_ == ABORTED) { // coord sent ABORT
-            //TODO: write ABORT in log
+            LogAbort();
         }
     }
 }
 
 //TODO: when participant recovers, make sure that it ignores STATE-REQ from new coord
+
+    //what does this thread do while timeout() waiting for SR thread to respond. 
+    //maybe i can just do, wait till a decision is made by SR thread
+    //know with the use of a shared variable
+
+    
+    // create thread 1 that always receives state requests
+    //     if it receives one SR, then create a thread 2 that prepares response and waits for it.
+    //     if another SR comes to thread 1, then 
+    //         if 2 is still waiting for something, kill thread 2 
+    //         if thread 2 has made a dec and exits, then return state to SR request
+    
+
+
+//start this thread initially in participant mode
+void* ReceiveStateOrDecisionRequest(void* _p) {
+        Process *p = (Process *)_p;
+
+
+
+
+}

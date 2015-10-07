@@ -18,7 +18,7 @@ pthread_mutex_t log_lock;
 
 void Process::Initialize(int pid, string log_file, string playlist_file) {
     pid_ = pid;
-    log_file_ = log_file_;
+    log_file_ = log_file;
     playlist_file_ = playlist_file;
     fd_.resize(N, -1);
     alive_fd_.resize(N, -1);
@@ -290,7 +290,6 @@ void Process::AddToLog(string s, bool new_round)
     else
         log_[transaction_id_].push_back(s);
 
-
     ofstream outfile(log_file_.c_str(), fstream::app);
     if (outfile.is_open())
         outfile << s << endl;
@@ -452,7 +451,7 @@ void Process::Recovery()
     else if(decision=="precommit")
     {
         my_state_ = COMMITTABLE;
-        TerminationProtocol();
+        DecisionRequest();
     }
 
     else
@@ -461,7 +460,7 @@ void Process::Recovery()
         if(vote=="yes")
             {
                 my_state_ = UNCERTAIN;
-                TerminationProtocol();
+                DecisionRequest();
             }
         else if (vote.empty())
         {
@@ -470,17 +469,64 @@ void Process::Recovery()
     }
 }
 
-//handle total failure case here
-void Process::TerminationProtocol()
+void Process::Timeout()
 {
-   
+    TerminationProtocol();
+}
+
+void Process::DecisionRequest()
+{
+    //if total failure, then init termination protocol with total failure. give arg to TP
+}
+
+void Process::TerminationProtocol()
+{   //called when a process times out.
+    
+    //sets new coord
+    ElectionProtocol(); 
+
+    if(pid_==my_coordinator_)
+    {//coord case
+        //pass on arg saying total failue, then send to all
+        NewCoordinatorMode();   
+    }
+    else
+    {
+        SendURElected(my_coordinator_);
+        //then do nothing here, the initial SR thread will see that a SR message is here
+        //so that replies state and does all that shit
+        //till we get a decision
+       // TerminationParticipantMode();
+    }
 }
 
 void Process::ElectionProtocol()
 {
+    int min = GetNewCoordinator();
+    set_my_coordinator(min);
+}
+
+void Process::SendURElected(int p)
+{
+    //send it on SR thread only
 
 }
 
+int Process::GetNewCoordinator()
+{
+    int min;
+    for ( auto it = up_.cbegin(); it != up_.cend(); ++it )
+        {
+            if(it==up_.cbegin())
+                min = (*it);
+            else
+            {
+                if(*it<min)
+                    min = *it;
+            }
+        }
+    return min;
+}
 
 //initial ones just to maintain uniformity. can be removed if want to handle string while calling
 void Process::LogCommit()
@@ -525,14 +571,21 @@ void Process::LogStart()
 {
     string s = "start";
     s+= " ";
-    for ( auto it = participants_.begin(); it != participants_.end(); ++it )
+
+    // for (const auto& ps : participant_state_map_) {
+    //     if(&ps!=participant_state_map_.begin())
+    //         s+=",";
+    //     s+=to_string(ps.first);
+    // }
+
+    for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it )
     {   
-        if(it!=participants_.begin())
+        if(it!=participant_state_map_.begin())
             s+=",";
-        s+=to_string(*it);
+        s+=to_string(it->first);
     }
 
-    AddToLog(s);
+    AddToLog(s, true);
 }
 
 
