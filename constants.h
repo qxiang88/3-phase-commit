@@ -15,13 +15,21 @@ const int kBacklog = 10;                // how many pending connections queue wi
 const string kAdd = "ADD";
 const string kRemove = "REMOVE";
 const string kEdit = "EDIT";
+
+const time_t kGeneralSleep = 2000 * 1000;
+const time_t kSendAliveInterval = 1000 * 1000;  // MUST be less than the kTimeout, preferably at least 1 sec less
+const timeval kReceiveAliveInterval = {
+    0,          // tv_sec
+    900 * 1000  //tv_usec (microsec)
+};   // slightly less than sendAliveInterval to avoid race conditions
+
 // timeout for select call (receive timeout)
 const timeval kTimeout = {
-    0,          // tv_sec
-    2000 * 1000  //tv_usec (microsec)
+    3,          // tv_sec
+    0  //tv_usec (microsec)
 };
 
-const time_t kGeneralSleep = 1000 * 1000;
+const string kAlive = "ALIVE";
 const string kVoteReq = "VOTE-REQ";
 const string kYes = "YES";
 const string kNo = "NO";

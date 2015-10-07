@@ -69,7 +69,7 @@ void Process::WaitForVotes() {
         }
         i++;
     }
-
+    
     void* status;
     ReceivedMsgType* r;
     i = 0;
@@ -301,9 +301,23 @@ void Process::CoordinatorMode() {
     // connect to each participant
     for (int i = 0; i < N; ++i) {
         if (i == get_pid()) continue;
-        if (ConnectToProcess(i))
+        if (ConnectToProcess(i)) {
             participant_state_map_.insert(make_pair(i, UNINITIALIZED));
+            // setup alive connection to this process
+            // if (ConnectToProcessAlive(i)) {
+            //     up_.insert(i);
+            // } else {
+            //     // Practically, this should not happen, since it just connected to i.
+            //     // TODO: not handling this rare case presently
+            //     // this causes up_ to deviate from participant_state_map_ at the beginning
+            //     cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << i << endl;
+            // }
+        }
     }
+    // usleep(kGeneralSleep); //sleep to make sure connections are established
+
+    // pthread_t send_alive_thread, receive_alive_thread;
+    // CreateAliveThreads(receive_alive_thread, send_alive_thread);
 
     string msg;
     ConstructVoteReq(msg);

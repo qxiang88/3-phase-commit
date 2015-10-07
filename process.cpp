@@ -12,6 +12,7 @@
 using namespace std;
 
 pthread_mutex_t fd_lock;
+pthread_mutex_t alive_fd_lock;
 ReceivedMsgType received_msg_type;
 pthread_mutex_t log_lock;
 
@@ -20,6 +21,7 @@ void Process::Initialize(int pid, string log_file, string playlist_file) {
     log_file_ = log_file_;
     playlist_file_ = playlist_file;
     fd_.resize(N, -1);
+    alive_fd_.resize(N, -1);
     process_state_.resize(N, UNINITIALIZED);
     my_state_ = UNINITIALIZED;
     transaction_id_ = 0;
@@ -41,6 +43,8 @@ void Process::set_playlist_file(string playlistfile) {
     playlist_file_ = playlistfile;
 }
 
+// TODO: remember to set _fd_ to -1 on connection close
+// saves socket fd for connection from a send port
 void Process::set_fd(int process_id, int new_fd) {
     pthread_mutex_lock(&fd_lock);
     if (fd_[process_id] == -1)
@@ -50,16 +54,37 @@ void Process::set_fd(int process_id, int new_fd) {
     pthread_mutex_unlock(&fd_lock);
 }
 
+// TODO: remember to set fd_ to -1 on connection close
+// saves socket fd for connection from a send port
+void Process::set_alive_fd(int process_id, int new_fd) {
+    pthread_mutex_lock(&alive_fd_lock);
+    if (alive_fd_[process_id] == -1)
+    {
+        alive_fd_[process_id] = new_fd;
+    }
+    pthread_mutex_unlock(&alive_fd_lock);
+}
+
 void Process::set_my_coordinator(int process_id) {
     my_coordinator_ = process_id;
     set_coordinator(process_id);
 }
 
+// get socket fd corresponding to process_id's send connection
 int Process::get_fd(int process_id) {
     int ret;
     pthread_mutex_lock(&fd_lock);
     ret = fd_[process_id];
     pthread_mutex_unlock(&fd_lock);
+    return ret;
+}
+
+// get socket fd corresponding to process_id's alive connection
+int Process::get_alive_fd(int process_id) {
+    int ret;
+    pthread_mutex_lock(&alive_fd_lock);
+    ret = alive_fd_[process_id];
+    pthread_mutex_unlock(&alive_fd_lock);
     return ret;
 }
 
@@ -177,8 +202,27 @@ void Process::InitializeLocks() {
         pthread_exit(NULL);
     }
 
+    if (pthread_mutex_init(&alive_fd_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+
     if (pthread_mutex_init(&log_lock, NULL) != 0) {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+}
+
+// creates one receive alive thread
+// creates one send-alive thread
+void Process::CreateAliveThreads(pthread_t &receive_alive_thread, pthread_t &send_alive_thread) {
+    if (pthread_create(&send_alive_thread, NULL, SendAlive, (void *)this)) {
+    cout << "P" << get_pid() << ": ERROR: Unable to create send-alive thread" << endl;
+        pthread_exit(NULL);
+    }
+
+    if (pthread_create(&receive_alive_thread, NULL, ReceiveAlive, (void *)this)) {
+    cout << "P" << get_pid() << ": ERROR: Unable to create receive-alive thread" << endl;
         pthread_exit(NULL);
     }
 }
@@ -202,12 +246,14 @@ void* ThreadEntry(void* _p) {
     //     pthread_exit(NULL);
     // }
 
-
+    // TODO: share all internal thread info with controller
+    // TODO: think whether we need to add the temporary receive threads as well?
     pthread_t server_thread;
     if (pthread_create(&server_thread, NULL, server, (void *)p)) {
         cout << "P" << p->get_pid() << ": ERROR: Unable to create server thread for P" << p->get_pid() << endl;
         pthread_exit(NULL);
     }
+    
     // sleep to make sure server is up and listening
     usleep(kGeneralSleep);
 

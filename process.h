@@ -10,13 +10,15 @@ using namespace std;
 
 // entry function for each process thread.
 // takes as argument pointer to the Process object
-void* ThreadEntry(void *p);
-void* server(void* _p);
-void* ReceiveVoteFromParticipant(void* _rcv_thread_arg);
-void* ReceiveAckFromParticipant(void* _rcv_thread_arg);
-int return_port_no(struct sockaddr *sa);
-void sigchld_handler(int s);
-vector<string> split(string s, char delimiter);
+extern void* ThreadEntry(void *p);
+extern void* server(void* _p);
+extern void* ReceiveVoteFromParticipant(void* _rcv_thread_arg);
+extern void* ReceiveAckFromParticipant(void* _rcv_thread_arg);
+extern void* SendAlive(void *_p);
+extern void* ReceiveAlive(void *_p);
+extern int return_port_no(struct sockaddr *sa);
+extern void sigchld_handler(int s);
+extern vector<string> split(string s, char delimiter);
 
 typedef enum
 {
@@ -33,6 +35,7 @@ public:
     void Initialize(int pid, string log_file, string playlist_file);
     bool LoadPlaylist();
     bool ConnectToProcess(int process_id);
+    bool ConnectToProcessAlive(int process_id);
     void Print();
     void InitializeLocks();
     void CoordinatorMode();
@@ -53,6 +56,10 @@ public:
     void SendMsgToCoordinator(const string &msg_to_send);
     void ReceivePreCommitOrAbortFromCoordinator();
     void ReceiveCommitFromCoordinator();
+    void CreateAliveThreads(pthread_t &receive_alive_thread, pthread_t &send_alive_thread);
+    void UpdateUpSet(std::unordered_set<int> &alive_processes);
+    void ConstructUpSet();
+
 
 
 
@@ -81,20 +88,30 @@ public:
     vector<string> get_log();
     int get_pid();
     int get_fd(int process_id);
+    int get_alive_fd(int process_id);
     void set_pid(int process_id);
     void set_fd(int process_id, int new_fd);
+    void set_alive_fd(int process_id, int new_fd);
     void set_log_file(string logfile);
     void set_playlist_file(string playlistfile);
     void set_my_coordinator(int process_id);
 
+    // list of processes operational for a transaction (and hence, an iteration of 3PC)
+    // operational for an iteration is defined as a process which
+    // NEVER failed during that iteration
+    // does not include self
+    unordered_set<int> up_;
 private:
     int pid_;
     string log_file_;
     string playlist_file_;
     std::unordered_map<string, string> playlist_;
 
-    // socket fd for connection to each process
+    // socket fd for each process corresponding to send connection
     std::vector<int> fd_;
+
+    // socket fd for each process corresponding to alive connection
+    std::vector<int> alive_fd_;
 
     // state of each process
     // for use by coordinator
@@ -107,8 +124,8 @@ private:
     map<int, vector<string> > log_;
 
     // bool am_coordinator_;
+    // list of processes involved in a transaction (and hence, an iteration of 3PC)
     unordered_set<int> participants_;
-    unordered_set<int> up_;
 
     // the coordinator which this process perceives
     // this is not same as the coordinator_ of Controller class

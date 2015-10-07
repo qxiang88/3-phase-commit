@@ -17,6 +17,7 @@ extern ReceivedMsgType received_msg_type;
 // sets transaction_msg to the extracted transaction msg above
 // sets the transaction_id_ variable
 // populates participants_ vector
+// DOES NOT populate up_ vector
 // returns true if VOTE-REQ is received
 bool Process::ExtractFromVoteReq(const string &msg, string &transaction_msg ) {
     bool ret;
@@ -73,6 +74,7 @@ bool Process::ExtractFromVoteReq(const string &msg, string &transaction_msg ) {
 // sets transaction_msg to the extracted transaction msg above
 // sets the transaction_id_ variable
 // populates participants_ vector
+// DOES NOT populate up_ vector
 bool Process::WaitForVoteReq(string &transaction_msg) {
     int pid = my_coordinator_;
     bool ret;
@@ -90,6 +92,7 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
         pthread_exit(NULL);
     } else if (rv == 0) {   //timeout
+        cout<<"TIMEOUT"<<endl;
         my_state_ = ABORTED;
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
@@ -236,10 +239,27 @@ void Process::ReceiveCommitFromCoordinator() {
     cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
 }
 
+// ALIVE connect to each process in participants_ list
+// adds them to the UP set.
+void Process::ConstructUpSet() {
+    up_.insert(my_coordinator_);
+    for (auto const &p : participants_) {
+        if (p == get_pid()) continue;
+        cout<<p<<endl;
+        if (ConnectToProcessAlive(p)) {
+            up_.insert(p);
+        } else {
+            //TODO: I don't think we need to do anything special
+            // apart from not adding participant_[i] to the upset.
+            cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << p << endl;
+        }
+    }
+    cout<<"END"<<endl;
+}
+
 // Function for a process which behaves as a normal participant
 // normal participant means one who has not suffered a failure
 void Process::ParticipantMode() {
-    usleep(kGeneralSleep); //sleep to make sure connections are established
     //TODO: find a better way to set coordinator
     set_my_coordinator(0);
 
@@ -249,13 +269,22 @@ void Process::ParticipantMode() {
         // TODO: handle this case
         // TODO: start election protocol
     }
-    usleep(kGeneralSleep); //sleep to make sure connections are established
+
+    // usleep(kGeneralSleep); //sleep to make sure connections are established
 
     string transaction_msg;
     if (!WaitForVoteReq(transaction_msg)) {
         // Some error happened in rcving VOTE REQ
         // TODO: check if special actions required
+    } else { // VOTE-REQ received.
+        // ConstructUpSet();
+
+        // pthread_t send_alive_thread, receive_alive_thread;
+        // CreateAliveThreads(receive_alive_thread, send_alive_thread);
+
+        // usleep(kGeneralSleep); //sleep to make sure connections are established
     }
+
     if (my_state_ == ABORTED) {
         //TODO: write ABORT in log
     }
@@ -280,3 +309,5 @@ void Process::ParticipantMode() {
         }
     }
 }
+
+//TODO: when participant recovers, make sure that it ignores STATE-REQ from new coord
