@@ -11,8 +11,6 @@
 #include "sstream"
 using namespace std;
 
-extern ReceivedMsgType received_msg_type;
-
 // extracts the transaction msg from the VOTE-REQ
 // sets transaction_msg to the extracted transaction msg above
 // sets the transaction_id_ variable
@@ -148,6 +146,7 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
         pthread_exit(NULL);
     } else if (rv == 0) {   //timeout
+        //TODO: check if SR received
         //TODO: initiate election protocol
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
@@ -245,9 +244,9 @@ void Process::ParticipantMode() {
 
     // connect to coordinator
     if (!ConnectToProcess(my_coordinator_)) {
+        my_coordinator_ = -1;
         // unable to connect to coordinator
-        // TODO: handle this case
-        // TODO: start election protocol
+        // (is it really required to )start election protocol
     }
     usleep(kGeneralSleep); //sleep to make sure connections are established
 
@@ -283,4 +282,28 @@ void Process::ParticipantMode() {
             LogAbort();
         }
     }
+
+    //what does this thread do while timeout() waiting for SR thread to respond. 
+    //maybe i can just do, wait till a decision is made by SR thread
+    //know with the use of a shared variable
+
+}
+
+
+    
+    // create thread 1 that always receives state requests
+    //     if it receives one SR, then create a thread 2 that prepares response and waits for it.
+    //     if another SR comes to thread 1, then 
+    //         if 2 is still waiting for something, kill thread 2 
+    //         if thread 2 has made a dec and exits, then return state to SR request
+    
+
+
+//start this thread initially in participant mode
+void* ReceiveStateOrDecisionRequest(void* _p) {
+        Process *p = (Process *)_p;
+
+
+
+
 }

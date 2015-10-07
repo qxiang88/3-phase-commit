@@ -36,15 +36,20 @@ public:
     void Print();
     void InitializeLocks();
     void CoordinatorMode();
+    void NewCoordinatorMode();
     void ParticipantMode();
+    void TerminationParticipantMode();
     void ConstructVoteReq(string &msg);
+    void ConstructStateReq(string &msg);
     void SendVoteReqToAll(const string &msg);
+    void SendStateReqToAll(const string &msg);
     void WaitForVotes();
     void ExtractMsg(const string &received_msg, string &extracted_msg, int &received_tid);
     void Vote(string trans);
     void SendAbortToProcess(int process_id);
     void ConstructGeneralMsg(const string &msg_body,
                              const int transaction_id, string &msg);
+    void SendPreCommitToProcess(int);
     void SendPreCommitToAll();
     void WaitForAck();
     void SendCommitToAll();
@@ -54,13 +59,15 @@ public:
     void ReceivePreCommitOrAbortFromCoordinator();
     void ReceiveCommitFromCoordinator();
 
-
-
-
-
     void Recovery();
+    void Timeout();
     void TerminationProtocol();
     void ElectionProtocol();
+    void SendURElected(int p);
+    int GetNewCoordinator();
+    void DecisionRequest();
+    void WaitForStates();
+
 
     void AddToLog(string s, bool new_round = false);
     int GetCoordinator();
@@ -129,7 +136,15 @@ struct ReceiveThreadArgument
     string expected_msg2;
     int pid;
     int transaction_id;
+    ReceivedMsgType received_msg_type;
 };
 
-
+struct ReceiveStateThreadArgument
+{
+    Process *p;
+    ProcessState st;
+    int pid;
+    int transaction_id;
+    ReceivedMsgType received_msg_type;
+};
 #endif //PROCESS_H
