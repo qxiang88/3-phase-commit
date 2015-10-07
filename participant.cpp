@@ -145,9 +145,9 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
     if (rv == -1) { //error in select
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
         pthread_exit(NULL);
-    } else if (rv == 0) {   //timeout
-        //TODO: check if SR received
-        //TODO: initiate election protocol
+    } else if (rv == 0) {   
+        //timeout
+        //do i need to set somethign here
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
@@ -156,8 +156,8 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
             cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
             // if coordinator closes connection, it is equivalent to coordinator crashing
             // can treat it as TIMEOUT
+            
             // TODO: verify argument
-            // TODO: need to initiate termination protocol
             // execute actions same as above if(rv==0) case
             //TODO: handle connection close based on different cases
         } else {
@@ -200,8 +200,8 @@ void Process::ReceiveCommitFromCoordinator() {
     if (rv == -1) { //error in select
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
         pthread_exit(NULL);
-    } else if (rv == 0) {   //timeout
-        //TODO: initiate election protocol
+    } else if (rv == 0) {   
+    //timeout
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
@@ -211,7 +211,6 @@ void Process::ReceiveCommitFromCoordinator() {
             // if coordinator closes connection, it is equivalent to coordinator crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
-            // TODO: need to initiate termination protocol
             // execute actions same as above if(rv==0) case
             //TODO: handle connection close based on different cases
         } else {
@@ -238,6 +237,9 @@ void Process::ReceiveCommitFromCoordinator() {
 // Function for a process which behaves as a normal participant
 // normal participant means one who has not suffered a failure
 void Process::ParticipantMode() {
+
+    //create SR thread here
+
     usleep(kGeneralSleep); //sleep to make sure connections are established
     //TODO: find a better way to set coordinator
     set_my_coordinator(0);
@@ -270,23 +272,46 @@ void Process::ParticipantMode() {
         LogYes();
         SendMsgToCoordinator(kYes);
         ReceivePreCommitOrAbortFromCoordinator();
-        if (my_state_ == COMMITTABLE) { // coord sent PRE-COMMIT
+
+        if (my_state_ == COMMITTABLE) 
+        { // coord sent PRE-COMMIT
             SendMsgToCoordinator(kAck);
             ReceiveCommitFromCoordinator();
-            if (my_state_ == COMMITTED) {
+            //this detects timeout, exits and state will be the same as intial
+            if (my_state_ == COMMITTED) 
+            {
                 LogCommit();
             }
-            // TODO: might need to check other values of my_state_
-            // because of results of termination protocol
-        } else if (my_state_ == ABORTED) { // coord sent ABORT
+            else
+            {
+                Timeout();
+            }
+        }
+
+        else if (my_state_ == ABORTED) 
+        { // coord sent ABORT
             LogAbort();
         }
+
+        else
+        {
+            Timeout();
+        }
+            // TODO: might need to check other values of my_state_
+            // because of results of termination protocol
+        } 
     }
 
+    while(!(my_state_==ABORTED || my_state_==COMMITTED))
+    {
     //what does this thread do while timeout() waiting for SR thread to respond. 
     //maybe i can just do, wait till a decision is made by SR thread
     //know with the use of a shared variable
+    //waiting blocking
 
+    //if this participant is new coord, then it will have waited there to get a decision
+    //else, we have to log abort or commit in SR thread receiving part
+    }    
 }
 
 
