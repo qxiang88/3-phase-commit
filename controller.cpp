@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "fstream"
 #include "iostream"
+#include "unistd.h"
 
 int Controller::N;
 int Controller::coordinator_;
@@ -66,6 +67,7 @@ int Controller::get_sdr_port_pid_map(int port_num) {
     else
         return sdr_port_pid_map_[port_num];
 }
+
 // reads the config file
 // sets value of N
 // adds port values to listen_port_ , send_port_, alive_port_
@@ -114,13 +116,6 @@ bool Controller::CreateProcesses() {
     process_.resize(N);
     for (int i = 0; i < N; i++) {
         process_[i].Initialize(i, kLogFile + to_string(i), kPlaylistFile + to_string(i));
-        // process_[i].set_pid(i);
-        // process_[i].set_log_file(kLogFile + to_string(i));
-        // process_[i].set_playlist_file(kPlaylistFile + to_string(i));
-        // process_.push_back(Process(
-        //                        i,
-        //                        kLogFile + to_string(i),
-        //                        kPlaylistFile + to_string(i)));
         if (pthread_create(&process_thread_[i], NULL, ThreadEntry, (void *)&process_[i])) {
             cout << "C: ERROR: Unable to create thread for P" << i << endl;
             return false;
@@ -153,6 +148,16 @@ string Controller::get_transaction(int transaction_id) {
     else return "NULL";
 }
 
+// cancels all threads created by the process
+// then, cancels the thread_entry thread for that process
+void Controller::KillProcess(int process_id) {
+    for(const auto &th: process_[process_id].thread_set) {
+        pthread_cancel(th);
+    }
+
+    pthread_cancel(process_thread_[process_id]);
+}
+
 bool InitializeLocks() {
     if (pthread_mutex_init(&coordinator_lock, NULL) != 0) {
         cout << "C: Mutex init failed" << endl;
@@ -167,7 +172,8 @@ int main() {
     if (!c.ReadConfigFile()) return 1;
     c.CreateTransactions();
     if (!c.CreateProcesses()) return 1;
-
+    // sleep(5);
+    // c.KillProcess(0);
     c.WaitForThreadJoins();
 
 

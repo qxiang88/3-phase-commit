@@ -30,6 +30,8 @@ public:
     // returns transaction string if transaction_id is valid
     // else returns the string "NULL"
     string get_transaction(int transaction_id);
+    void KillProcess(int process_id);
+
 
 
 protected:

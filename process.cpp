@@ -12,6 +12,7 @@
 using namespace std;
 
 pthread_mutex_t fd_lock;
+extern pthread_mutex_t up_lock;
 pthread_mutex_t alive_fd_lock;
 pthread_mutex_t sdr_fd_lock;
 ReceivedMsgType received_msg_type;
@@ -39,11 +40,8 @@ void* ThreadEntry(void* _p) {
     // TODO: share all internal thread info with controller
     // TODO: think whether we need to add the temporary receive threads as well?
     pthread_t server_thread;
-    if (pthread_create(&server_thread, NULL, server, (void *)p)) {
-        cout << "P" << p->get_pid() << ": ERROR: Unable to create server thread for P" << p->get_pid() << endl;
-        pthread_exit(NULL);
-    }
-    
+    p->CreateThread(server_thread, server, (void *)p);
+
     // sleep to make sure server is up and listening
     usleep(kGeneralSleep);
 
@@ -73,6 +71,7 @@ void Process::Initialize(int pid, string log_file, string playlist_file) {
     process_state_.resize(N, UNINITIALIZED);
     my_state_ = UNINITIALIZED;
     transaction_id_ = 0;
+    thread_set.clear();
 }
 
 int Process::get_pid() {
@@ -170,6 +169,16 @@ void Process::Print() {
         cout << fd_[i] << ",";
     }
     cout << endl;
+}
+
+// adds the pthread_t entry to the thread_set
+void Process::AddThreadToSet(pthread_t thread) {
+    thread_set.insert(thread);
+}
+
+// removes the pthread_t entry from the thread_set
+void Process::RemoveThreadFromSet(pthread_t thread) {
+    thread_set.erase(thread);
 }
 
 // reads the playlist file
@@ -286,32 +295,37 @@ void Process::InitializeLocks() {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
         pthread_exit(NULL);
     }
+
     if (pthread_mutex_init(&log_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+
+    if (pthread_mutex_init(&up_lock, NULL) != 0) {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
         pthread_exit(NULL);
     }
 }
 
+// creates a new thread with passed
+// adds the new thread to the thread set
+void Process::CreateThread(pthread_t &thread, void* (*f)(void* ), void* arg) {
+    if (pthread_create(&thread, NULL, f, arg)) {
+        cout << "P" << get_pid() << ": ERROR: Unable to create thread" << endl;
+        pthread_exit(NULL);
+    }
+    AddThreadToSet(thread);
+}
+
 // creates one receive alive thread
 // creates one send-alive thread
 void Process::CreateAliveThreads(pthread_t &receive_alive_thread, pthread_t &send_alive_thread) {
-    if (pthread_create(&send_alive_thread, NULL, SendAlive, (void *)this)) {
-    cout << "P" << get_pid() << ": ERROR: Unable to create send-alive thread" << endl;
-        pthread_exit(NULL);
-    }
-
-    if (pthread_create(&receive_alive_thread, NULL, ReceiveAlive, (void *)this)) {
-    cout << "P" << get_pid() << ": ERROR: Unable to create receive-alive thread" << endl;
-        pthread_exit(NULL);
-    }
+    CreateThread(receive_alive_thread, SendAlive, (void *)this);
+    CreateThread(send_alive_thread, ReceiveAlive, (void *)this);
 }
 
 void Process::CreateSDRThread(pthread_t &rec_sr_dr_thread) {
-
-    if (pthread_create(&rec_sr_dr_thread, NULL, ReceiveStateOrDecReq, (void *)this)) {
-    cout << "P" << get_pid() << ": ERROR: Unable to create SDR thread" << endl;
-        pthread_exit(NULL);
-    }
+    CreateThread(rec_sr_dr_thread, ReceiveStateOrDecReq, (void *)this);
 }
 
 void Process::AddToLog(string s, bool new_round)
@@ -400,7 +414,7 @@ string Process::GetDecision()
     vector<string> cur_trans_log = log_[transaction_id_];
     for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
     {
-        if(   (*it) == "commit" || (*it) == "abort" || (*it) == "precommit" )
+        if (   (*it) == "commit" || (*it) == "abort" || (*it) == "precommit" )
             return *it;
     }
     return "";
@@ -411,7 +425,7 @@ string Process::GetVote()
     vector<string> cur_trans_log = log_[transaction_id_];
     for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
     {
-        if( (*it) == "yes" )
+        if ( (*it) == "yes" )
             return *it;
 
         // else if ( (*it) == "abort")
@@ -445,13 +459,13 @@ void Process::LoadParticipants()
 
     else
     {
-        if(tokens[0]=="votereq")
+        if (tokens[0] == "votereq")
         {
             vector<string> rv = split(tokens[2], ',');
             for (vector<string>::iterator it = rv.begin(); it < rv.end(); it++)
             {
                 participants_.insert(atoi((*it).c_str()));
-            }   
+            }
 
             participants_.insert(atoi(tokens[1].c_str()));
         }
@@ -467,7 +481,7 @@ int Process::GetCoordinator()
     {
         string entry = log_[transaction_id_][0];
         vector<string> tokens = split(entry, ' ');
-        if(tokens[0]=="votereq")
+        if (tokens[0] == "votereq")
         {
             return atoi(tokens[1].c_str());
         }
@@ -484,13 +498,13 @@ void Process::Recovery()
 
     //probably need to send the decision to others
 
-    if(decision=="commit")
+    if (decision == "commit")
         my_state_ = COMMITTED;
 
-    else if(decision=="abort")
+    else if (decision == "abort")
         my_state_ = ABORTED;
 
-    else if(decision=="precommit")
+    else if (decision == "precommit")
     {
         my_state_ = COMMITTABLE;
         DecisionRequest();
@@ -499,11 +513,11 @@ void Process::Recovery()
     else
     {   //no decision
         string vote = GetVote();
-        if(vote=="yes")
-            {
-                my_state_ = UNCERTAIN;
-                DecisionRequest();
-            }
+        if (vote == "yes")
+        {
+            my_state_ = UNCERTAIN;
+            DecisionRequest();
+        }
         else if (vote.empty())
         {
             my_state_ = ABORTED;
@@ -523,21 +537,15 @@ void Process::DecisionRequest()
 
 void Process::TerminationProtocol()
 {   //called when a process times out.
-    
+
     //sets new coord
-    cout<<"TerminationProtocol"<<endl;
-    ElectionProtocol(); 
+    cout << "TerminationProtocol" << endl;
+    ElectionProtocol();
 
-    if(pid_==my_coordinator_)
-    {//coord case
+    if (pid_ == my_coordinator_)
+    {   //coord case
         //pass on arg saying total failue, then send to all
-
-        if (pthread_create(&newcoord_thread, NULL, NewCoordinatorMode, (void *) this)) 
-        {
-            cout << "P" << get_pid() << ": ERROR: Unable to create new coord thread" << endl;
-            pthread_exit(NULL);
-        }
-    
+        CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
     }
     else
     {
@@ -545,7 +553,7 @@ void Process::TerminationProtocol()
         //then do nothing here, the initial SR thread will see that a SR message is here
         //so that replies state and does all that shit
         //till we get a decision
-       // TerminationParticipantMode();
+        // TerminationParticipantMode();
     }
 }
 
@@ -553,7 +561,7 @@ void Process::ElectionProtocol()
 {
     int min = GetNewCoordinator();
     set_my_coordinator(min);
-    cout<<"P"<<pid_<<": my new coordinator="<<min<<endl;
+    cout << "P" << pid_ << ": my new coordinator=" << min << endl;
 }
 
 void Process::SendURElected(int recp)
@@ -575,15 +583,15 @@ int Process::GetNewCoordinator()
 {
     int min;
     for ( auto it = up_.cbegin(); it != up_.cend(); ++it )
+    {
+        if (it == up_.cbegin())
+            min = (*it);
+        else
         {
-            if(it==up_.cbegin())
-                min = (*it);
-            else
-            {
-                if(*it<min)
-                    min = *it;
-            }
+            if (*it < min)
+                min = *it;
         }
+    }
     return min;
 }
 
@@ -611,25 +619,25 @@ void Process::LogVoteReq()
 {
 
     string s = "votereq";
-    s+= " ";
-    s+= to_string(my_coordinator_);
-    s+=" ";
+    s += " ";
+    s += to_string(my_coordinator_);
+    s += " ";
 
     // for(int i=0; i<participants_.size(); i++)
     for ( auto it = participants_.begin(); it != participants_.end(); ++it )
-    {   
-        if(it!=participants_.begin())
-            s+=",";
-        s+=to_string(*it);
+    {
+        if (it != participants_.begin())
+            s += ",";
+        s += to_string(*it);
     }
 
-    AddToLog(s,true);
+    AddToLog(s, true);
 }
 
 void Process::LogStart()
 {
     string s = "start";
-    s+= " ";
+    s += " ";
 
     // for (const auto& ps : participant_state_map_) {
     //     if(&ps!=participant_state_map_.begin())
@@ -638,10 +646,10 @@ void Process::LogStart()
     // }
 
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it )
-    {   
-        if(it!=participant_state_map_.begin())
-            s+=",";
-        s+=to_string(it->first);
+    {
+        if (it != participant_state_map_.begin())
+            s += ",";
+        s += to_string(it->first);
     }
 
     AddToLog(s, true);
