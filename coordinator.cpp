@@ -43,6 +43,7 @@ void Process::SendVoteReqToAll(const string &msg) {
 
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
+            RemoveFromUpSet(it->first);
         }
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
@@ -56,8 +57,9 @@ void Process::SendStateReqToAll(const string &msg) {
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
 
-        if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
+        if (send(get_sdr_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
+            RemoveFromUpSet(it->first);
         }
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
@@ -159,6 +161,8 @@ void Process::WaitForStates() {
         rcv_thread_arg[i]->pid = it->first;
         rcv_thread_arg[i]->transaction_id = transaction_id_;
         rcv_thread_arg[i]->st = UNINITIALIZED;
+        // rcv_thread_arg[i]->received_msg_type = UNINITIALIZED;
+
         CreateThread(receive_thread[i], ReceiveStateFromParticipant, (void *)rcv_thread_arg[i]);
         i++;
     }
@@ -166,20 +170,21 @@ void Process::WaitForStates() {
     void* status;
     i = 0;
     for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
+        cout<<"about to join "<<it->first<<endl;
         pthread_join(receive_thread[i], &status);
+        cout<<"joined "<<it->first<<endl;
         RemoveThreadFromSet(receive_thread[i]);
-        if ((rcv_thread_arg[i]->received_msg_type) == ERROR) {
+        if ((rcv_thread_arg[i]->st) == UNINITIALIZED) {
             //TODO: not necessarily. handle
+            //error
             pthread_exit(NULL);
-        } else if ((rcv_thread_arg[i]->received_msg_type) == TIMEOUT) {
-            // if a participant votes no, mark its state as PROCESSTIMEOUT
-            it->second = PROCESSTIMEOUT;
         }
         else {
             it->second = rcv_thread_arg[i]->st;
-        }
 
+        }
         i++;
+        cout<<"enum val"<<it->second<<endl;
     }
 }
 
@@ -192,6 +197,7 @@ void Process::SendPreCommitToAll() {
 
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
+            RemoveFromUpSet(it->first);
         }
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
@@ -205,6 +211,7 @@ void Process::SendPreCommitToProcess(int process_id) {
 
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
+        RemoveFromUpSet(process_id);
     }
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << process_id << ": " << msg << endl;
@@ -221,6 +228,7 @@ void Process::SendCommitToAll() {
 
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
+            RemoveFromUpSet(it->first);
         }
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
@@ -253,16 +261,19 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
         rcv_thread_arg->received_msg_type = ERROR;
     } else if (rv == 0) {   //timeout
         rcv_thread_arg->received_msg_type = TIMEOUT;
+        p->RemoveFromUpSet(pid);
     } else {    // activity happened on the socket
         if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
             rcv_thread_arg->received_msg_type = ERROR;
+            p->RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
             cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
             // if participant closes connection, it is equivalent to it crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
             rcv_thread_arg->received_msg_type = TIMEOUT;
+            p->RemoveFromUpSet(pid);
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
@@ -285,7 +296,7 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
             }
         }
     }
-    cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
+    // cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
     return NULL;
 }
 
@@ -313,16 +324,19 @@ void* ReceiveAckFromParticipant(void* _rcv_thread_arg) {
         rcv_thread_arg->received_msg_type = ERROR;
     } else if (rv == 0) {   //timeout
         rcv_thread_arg->received_msg_type = TIMEOUT;
+        p->RemoveFromUpSet(pid);
     } else {    // activity happened on the socket
         if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
             rcv_thread_arg->received_msg_type = ERROR;
+            p->RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
             cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
             // if participant closes connection, it is equivalent to it crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
             rcv_thread_arg->received_msg_type = TIMEOUT;
+            p->RemoveFromUpSet(pid);
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
@@ -343,7 +357,7 @@ void* ReceiveAckFromParticipant(void* _rcv_thread_arg) {
             }
         }
     }
-    cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
+    // cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
     return NULL;
 }
 
@@ -352,7 +366,6 @@ void* ReceiveStateFromParticipant(void* _rcv_thread_arg) {
     int pid = rcv_thread_arg->pid;
     int tid = rcv_thread_arg->transaction_id;
     Process *p = rcv_thread_arg->p;
-
     char buf[kMaxDataSize];
     int num_bytes;
     //TODO: write code to extract multiple messages
@@ -365,23 +378,24 @@ void* ReceiveStateFromParticipant(void* _rcv_thread_arg) {
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
         cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << endl;
-        rcv_thread_arg->received_msg_type = ERROR;
     } else if (rv == 0) {   //timeout
-        rcv_thread_arg->received_msg_type = TIMEOUT;
+        rcv_thread_arg->st = PROCESSTIMEOUT;
+        p->RemoveFromUpSet(pid);
     } else {    // activity happened on the socket
         if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
-            rcv_thread_arg->received_msg_type = ERROR;
+            p->RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
             cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
             // if participant closes connection, it is equivalent to it crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
-            rcv_thread_arg->received_msg_type = TIMEOUT;
+            rcv_thread_arg->st = PROCESSTIMEOUT;
+            p->RemoveFromUpSet(pid);
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << p->get_pid() << ": Msg received from P" << pid << ": " << buf <<  endl;
+            cout << "P" << p->get_pid() << ": State Msg received from P" << pid << ": " << buf <<  endl;
 
             string extracted_msg;
             int received_tid;
@@ -404,7 +418,7 @@ void* ReceiveStateFromParticipant(void* _rcv_thread_arg) {
             // }
         }
     }
-    cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
+    // cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
     return NULL;
 }
 
@@ -421,12 +435,14 @@ void Process::CoordinatorMode() {
     //TODO: send it to ConstructVoteReq;
 
     // connect to each participant
+
     for (int i = 0; i < N; ++i) {
         if (i == get_pid()) continue;
         if (ConnectToProcess(i)) {
             participant_state_map_.insert(make_pair(i, UNINITIALIZED));
             // setup alive connection to this process
             if (ConnectToProcessAlive(i)) {
+                ConnectToProcessSDR(i);
                 up_.insert(i);
             } else {
                 // Practically, this should not happen, since it just connected to i.
@@ -436,10 +452,10 @@ void Process::CoordinatorMode() {
             }
         }
     }
-    // usleep(kGeneralSleep); //sleep to make sure connections are established
+    usleep(kGeneralSleep); //sleep to make sure connections are established
 
-    pthread_t send_alive_thread, receive_alive_thread;
-    CreateAliveThreads(receive_alive_thread, send_alive_thread);
+    pthread_t send_alive_thread;
+    vector<pthread_t> receive_alive_threads(up_.size());
 
     pthread_t rec_sr_dr_thread;
     CreateSDRThread(rec_sr_dr_thread);
@@ -449,6 +465,9 @@ void Process::CoordinatorMode() {
 
     SendVoteReqToAll(msg);
     LogStart();
+
+
+    CreateAliveThreads(receive_alive_threads, send_alive_thread);
     WaitForVotes();
 
     string trans = get_transaction(transaction_id_);
@@ -480,6 +499,8 @@ void Process::CoordinatorMode() {
         }
     } else {
 
+        return;
+
         LogPreCommit();
         SendPreCommitToAll();
         WaitForAck();
@@ -499,7 +520,11 @@ void Process::CoordinatorMode() {
 void* NewCoordinatorMode(void * _p) {
     //TODO: send tid to ConstructVoteReq;
     Process *p = (Process *)_p;
-    cout << "NewCoordSet" << p->get_pid() << endl;
+    
+
+    ofstream outf("log/newcoord"+to_string(p->get_pid())+","+to_string(time(NULL)%100), fstream::app);
+    outf << "NewCoordSet" << p->get_pid() << endl;
+
     // connect to each participant
     p->participant_state_map_.clear();
     //set participant state map but only those processes that are alive
@@ -513,6 +538,7 @@ void* NewCoordinatorMode(void * _p) {
     p->ConstructStateReq(msg);
 
     p->SendStateReqToAll(msg);
+    outf << "sent state req"<< endl;
     p->WaitForStates();
 
     ProcessState my_state_ = p->get_my_state();
@@ -564,6 +590,7 @@ void* NewCoordinatorMode(void * _p) {
     }
     if (uncert && my_state_ == UNCERTAIN)
     {
+        outf << "sending abort"<< endl;
         p->LogAbort();
         for (const auto& ps : p->participant_state_map_) {
             p->SendAbortToProcess(ps.first);

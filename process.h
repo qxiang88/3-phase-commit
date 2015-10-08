@@ -24,6 +24,7 @@ extern void* NewCoordinatorMode(void *_p);
 extern int return_port_no(struct sockaddr *sa);
 extern void sigchld_handler(int s);
 extern vector<string> split(string s, char delimiter);
+extern void PrintUpSet(int, unordered_set<int>);
 
 typedef enum
 {
@@ -73,23 +74,26 @@ public:
     void SendMsgToCoordinator(const string &msg_to_send);
     void ReceivePreCommitOrAbortFromCoordinator();
     void ReceiveCommitFromCoordinator();
-    void CreateAliveThreads(pthread_t &receive_alive_thread, pthread_t &send_alive_thread);
+    void CreateAliveThreads(vector<pthread_t> &receive_alive_thread, pthread_t &send_alive_thread);
     void CreateSDRThread(pthread_t&);
     void UpdateUpSet(std::unordered_set<int> &alive_processes);
+    void RemoveFromUpSet(int);
     void ConstructUpSet();
     void SendState(int);
     void AddThreadToSet(pthread_t thread);
     void RemoveThreadFromSet(pthread_t thread);
     void CreateThread(pthread_t &thread, void* (*f)(void* ), void* arg);
 
-
+    void CloseFDs();
+    void CloseAliveFDs();
+    void CloseSDRFDs();
 
 
     void Recovery();
     void Timeout();
     void TerminationProtocol();
     void ElectionProtocol();
-    void SendURElected(int p);
+    bool SendURElected(int p);
     int GetNewCoordinator();
     void DecisionRequest();
     void WaitForStates();
@@ -128,6 +132,7 @@ public:
     ProcessState get_my_state();
     int get_my_coordinator();
     int get_transaction_id();
+
     // list of processes operational for a transaction (and hence, an iteration of 3PC)
     // operational for an iteration is defined as a process which
     // NEVER failed during that iteration
@@ -141,6 +146,7 @@ public:
     vector<Decision> prev_decisions_;
     // set of all threads created by a process
     std::unordered_set<pthread_t> thread_set;
+    std::unordered_set<int> alive_processes;
 
 private:
     int pid_;
@@ -198,7 +204,6 @@ struct ReceiveStateThreadArgument
     ProcessState st;
     int pid;
     int transaction_id;
-    ReceivedMsgType received_msg_type;
 };
 
 struct ReceiveDecThreadArgument
@@ -209,4 +214,12 @@ struct ReceiveDecThreadArgument
     int transaction_id;
     ReceivedMsgType received_msg_type;
 };
+
+
+struct ReceiveAliveThreadArgument
+{
+    Process *p;
+    int pid_from_whom;
+};
+
 #endif //PROCESS_H

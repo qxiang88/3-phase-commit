@@ -113,7 +113,7 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
             //TODO: handle return bool
         }
     }
-    cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
+    // cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
     return ret;
 
 }
@@ -124,6 +124,7 @@ void Process::SendMsgToCoordinator(const string &msg_to_send) {
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     if (send(get_fd(my_coordinator_), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << my_coordinator_ << endl;
+        RemoveFromUpSet(my_coordinator_);
     }
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << my_coordinator_ << ": " << msg << endl;
@@ -183,7 +184,7 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
             }
         }
     }
-    cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
+    // cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
 }
 
 // Waits for COMMIT from coordinator
@@ -234,7 +235,7 @@ void Process::ReceiveCommitFromCoordinator() {
             }
         }
     }
-    cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
+    // cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
 }
 
 // ALIVE connect to each process in participants_ list
@@ -243,8 +244,9 @@ void Process::ConstructUpSet() {
     up_.insert(my_coordinator_);
     for (auto const &p : participants_) {
         if (p == get_pid()) continue;
-        cout<<p<<endl;
+        // cout<<p<<endl;
         if (ConnectToProcessAlive(p)) {
+            ConnectToProcessSDR(p);
             up_.insert(p);
         } else {
             //TODO: I don't think we need to do anything special
@@ -279,9 +281,9 @@ void Process::ParticipantMode() {
     } else { // VOTE-REQ received.
         ConstructUpSet();
 
-        pthread_t send_alive_thread, receive_alive_thread;
-        CreateAliveThreads(receive_alive_thread, send_alive_thread);
-
+        pthread_t send_alive_thread;
+        vector<pthread_t> receive_alive_threads(up_.size());
+        CreateAliveThreads(receive_alive_threads, send_alive_thread);
 
         pthread_t rec_sr_dr_thread;
         CreateSDRThread(rec_sr_dr_thread);
@@ -320,7 +322,9 @@ void Process::ParticipantMode() {
             }
             else
             {
+                RemoveFromUpSet(my_coordinator_);
                 Timeout();
+                
             }
         }
 
@@ -331,7 +335,9 @@ void Process::ParticipantMode() {
 
         else
         {
+            RemoveFromUpSet(my_coordinator_);
             Timeout();
+            
         }
             // TODO: might need to check other values of my_state_
             // because of results of termination protocol 

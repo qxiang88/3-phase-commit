@@ -122,7 +122,7 @@ void* ReceiveStateOrDecReq(void *_p) {
     int fd_max;
     FD_ZERO(&partici_set);
     for (auto it = p->participants_.begin(); it != p->participants_.end(); ++it) {
-        FD_SET(p->get_fd(*it), &partici_set);
+        FD_SET(p->get_sdr_fd(*it), &partici_set);
         fd_max = max(fd_max, *it);
     }
 
@@ -132,8 +132,10 @@ void* ReceiveStateOrDecReq(void *_p) {
 	    // no need to lock mutex here since updates to UP are perfomed
 	    // by this thread itself at the end.
 		temp_set = partici_set;
-	    int rv = select(fd_max + 1, &temp_set, NULL, NULL, NULL);
-
+        sleep(1);
+	    // int rv = select(fd_max + 1, &temp_set, NULL, NULL, NULL);
+        int rv=0;
+        // cout<<"Select returns"<<endl;
 	    if (rv == -1) 
 	    {
 	        cout << "P" << p->get_pid() << ": ERROR in select() in SD receive" << endl;
@@ -145,18 +147,22 @@ void* ReceiveStateOrDecReq(void *_p) {
 	    // } 
 	    else 
 	    {
+            cout<<"something on SDR"<<endl;
 	        for (auto it = p->participants_.begin(); it != p->participants_.end(); ++it) 
 	        {
-	            if (FD_ISSET(p->get_fd(*it), &temp_set)) 
-	            { // we got one!!
-	                if ((num_bytes = recv(p->get_fd(*it), buf, kMaxDataSize - 1, 0)) == -1) 
+                if(*it == p->get_pid()) continue;
+	            // if (FD_ISSET(p->get_sdr_fd(*it), &temp_set)) 
+	            // { // we got one!!
+	                if ((num_bytes = recv(p->get_sdr_fd(*it), buf, kMaxDataSize - 1, 0)) == -1) 
 	                {
 	                    cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << *it << endl;
-	                    pthread_exit(NULL); //TODO: think about whether it should be exit or not
+                        p->RemoveFromUpSet(*it);
+	                    // pthread_exit(NULL); //TODO: think about whether it should be exit or not
 	                } 
 	                else if (num_bytes == 0) 
 	                {     //connection closed
 	                    cout << "P" << p->get_pid() << ": SDR connection closed by P" << *it << endl;
+                        p->RemoveFromUpSet(*it);
 	                } 
 	                else 
 	                {
@@ -216,12 +222,8 @@ void* ReceiveStateOrDecReq(void *_p) {
                                 p->SendPrevDecision((*it), recvd_tid);
                             }
                         }
-
-                    
-
-	                    
 	                }
-	            }
+	            // }
 	        }
         }
         // p->UpdateUpSet(alive_processes);

@@ -151,11 +151,14 @@ string Controller::get_transaction(int transaction_id) {
 // cancels all threads created by the process
 // then, cancels the thread_entry thread for that process
 void Controller::KillProcess(int process_id) {
+    process_[process_id].CloseFDs();
+    process_[process_id].CloseSDRFDs();
+    process_[process_id].CloseAliveFDs();
     for(const auto &th: process_[process_id].thread_set) {
         pthread_cancel(th);
     }
-
     pthread_cancel(process_thread_[process_id]);
+
 }
 
 bool InitializeLocks() {
@@ -172,8 +175,8 @@ int main() {
     if (!c.ReadConfigFile()) return 1;
     c.CreateTransactions();
     if (!c.CreateProcesses()) return 1;
-    // sleep(5);
-    // c.KillProcess(0);
+    sleep(4);
+    c.KillProcess(0);
     c.WaitForThreadJoins();
 
 

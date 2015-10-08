@@ -126,7 +126,7 @@ bool Process::ConnectToProcess(int process_id) {
     // cout << "P" << get_pid() << ": Client: connecting to " << outgoing_port << endl ;
     freeaddrinfo(servinfo); // all done with this structure
     set_fd(process_id, sockfd);
-    cout << "P" << get_pid() << ": Initiating connection to P" << process_id << endl;
+    // cout << "P" << get_pid() << ": Initiating connection to P" << process_id << endl;
     return true;
 }
 
@@ -196,7 +196,7 @@ void* server(void* _p) {
         perror("sigaction");
         exit(1);
     }
-    cout << "P" << p->get_pid() << ": Server: waiting for connections...\n";
+    // cout << "P" << p->get_pid() << ": Server: waiting for connections...\n";
     while (1) {
         // main accept() loop
         sin_size = sizeof their_addr;
@@ -210,14 +210,14 @@ void* server(void* _p) {
         int process_id = p->get_send_port_pid_map(incoming_port);
         if (process_id != -1) {   // incoming connection is from send_port
             p->set_fd(process_id, new_fd);
-            cout << "P" << p->get_pid() << ": Server: accepting connection from P"
-                 << p->get_send_port_pid_map(incoming_port) << endl;
+            // cout << "P" << p->get_pid() << ": Server: accepting connection from P"
+                 // << p->get_send_port_pid_map(incoming_port) << endl;
         } else {    
             process_id = p->get_alive_port_pid_map(incoming_port);
             if(process_id != -1) { // incoming connection is from alive port
                 p->set_alive_fd(process_id, new_fd);
-                cout << "P" << p->get_pid() << ": Server: accepting ALIVE connection from P"
-                     << p->get_alive_port_pid_map(incoming_port) << endl;
+                // cout << "P" << p->get_pid() << ": Server: accepting ALIVE connection from P"
+                     // << p->get_alive_port_pid_map(incoming_port) << endl;
             } else {
                 process_id = p->get_sdr_port_pid_map(incoming_port);
                 p->set_sdr_fd(process_id, new_fd);

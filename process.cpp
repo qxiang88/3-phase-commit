@@ -37,7 +37,7 @@ void* ThreadEntry(void* _p) {
     p->CreateThread(server_thread, server, (void *)p);
 
     // sleep to make sure server is up and listening
-    usleep(kGeneralSleep);
+    // usleep(kGeneralSleep);
 
     // if pid=0, then it is the coordinator
     //TODO: find a better way to set coordinator
@@ -258,6 +258,7 @@ void Process::SendAbortToProcess(int process_id) {
 
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
+        RemoveFromUpSet(process_id);
     }
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << process_id << ": " << msg << endl;
@@ -313,9 +314,22 @@ void Process::CreateThread(pthread_t &thread, void* (*f)(void* ), void* arg) {
 
 // creates one receive alive thread
 // creates one send-alive thread
-void Process::CreateAliveThreads(pthread_t &receive_alive_thread, pthread_t &send_alive_thread) {
-    CreateThread(receive_alive_thread, SendAlive, (void *)this);
-    CreateThread(send_alive_thread, ReceiveAlive, (void *)this);
+void Process::CreateAliveThreads(vector<pthread_t> &receive_alive_threads, pthread_t &send_alive_thread) {
+
+    int n = up_.size();
+    // 
+
+    ReceiveAliveThreadArgument **rcv_thread_arg = new ReceiveAliveThreadArgument*[n];
+    int i = 0;
+    for (auto it = up_.begin(); it != up_.end(); ++it ) {
+        rcv_thread_arg[i] = new ReceiveAliveThreadArgument;
+        rcv_thread_arg[i]->p = this;
+        rcv_thread_arg[i]->pid_from_whom = *it;
+        CreateThread(receive_alive_threads[i], ReceiveAlive, (void *)rcv_thread_arg[i]);
+        i++;
+    }
+    // CreateThread(receive_alive_thread, ReceiveAlive, (void *)this);
+    CreateThread(send_alive_thread, SendAlive, (void *)this);
 }
 
 void Process::CreateSDRThread(pthread_t &rec_sr_dr_thread) {
@@ -655,7 +669,7 @@ void* ReceiveDecision(void* _rcv_thread_arg)
             //assumes that correct message type is sent by participant
         }
     }
-    cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
+    // cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
     return NULL;
 }
 
@@ -667,6 +681,7 @@ void Process::SendDecReqToAll(const string &msg) {
         // if ((it->first) == get_pid()) continue; // do not send to self
         if (send(get_sdr_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (*it) << endl;
+            RemoveFromUpSet(*it);
         }
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (*it) << ": " << msg << endl;
@@ -680,20 +695,30 @@ void Process::TerminationProtocol()
 
     //sets new coord
     cout << "TerminationProtocol" << endl;
-    ElectionProtocol();
+    bool status = false;
+    while(!status){
+        ElectionProtocol();
 
-    if (pid_ == my_coordinator_)
-    {   //coord case
-        //pass on arg saying total failue, then send to all
-        CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
-    }
-    else
-    {
-        SendURElected(my_coordinator_);
-        //then do nothing here, the initial SR thread will see that a SR message is here
-        //so that replies state and does all that shit
-        //till we get a decision
-        // TerminationParticipantMode();
+
+        if(my_coordinator_==1)
+            cout << "P" << pid_ << ": my new coordinator=one"<< endl;
+        else if(my_coordinator_==2)
+            cout << "P" << pid_ << ": my new coordinator=two"<< endl;
+
+        if (pid_ == my_coordinator_)
+        {   //coord case
+            //pass on arg saying total failue, then send to all
+            CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
+        }
+        else
+        {
+            status = SendURElected(my_coordinator_);
+            //then do nothing here, the initial SR thread will see that a SR message is here
+            //so that replies state and does all that shit
+            //till we get a decision
+            // TerminationParticipantMode();
+        }
+        break;
     }
 }
 
@@ -701,10 +726,10 @@ void Process::ElectionProtocol()
 {
     int min = GetNewCoordinator();
     set_my_coordinator(min);
-    cout << "P" << pid_ << ": my new coordinator=" << min << endl;
+
 }
 
-void Process::SendURElected(int recp)
+bool Process::SendURElected(int recp)
 {
     //send it on SR thread only
     string msg;
@@ -712,19 +737,28 @@ void Process::SendURElected(int recp)
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+        RemoveFromUpSet(recp);
+        return false;
     }
     else {
         cout << "P" << get_pid() << ": URElected Msg sent to P" << recp << ": " << msg << endl;
+        return true;
     }
 
 }
 
 int Process::GetNewCoordinator()
 {
+    // ofstream ofile("log/selectnewcoord"+to_string(get_pid())+","+to_string(time(NULL)%100));
     int min;
-    for ( auto it = up_.cbegin(); it != up_.cend(); ++it )
+    pthread_mutex_lock(&up_lock);
+    unordered_set<int> copy_up(up_);
+    pthread_mutex_unlock(&up_lock);
+
+    for ( auto it = copy_up.cbegin(); it != copy_up.cend(); ++it )
     {
-        if (it == up_.cbegin())
+        // ofile<<*it;
+        if (it == copy_up.cbegin())
             min = (*it);
         else
         {
@@ -732,6 +766,10 @@ int Process::GetNewCoordinator()
                 min = *it;
         }
     }
+    
+    if(min>get_pid())
+        min = get_pid();
+    // ofile<<"min: "<<min<<endl;
     return min;
 }
 
@@ -820,6 +858,7 @@ void Process::SendState(int recp)
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+        RemoveFromUpSet(recp);
     }
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
@@ -838,6 +877,7 @@ void Process::SendDecision(int recp)
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+        RemoveFromUpSet(recp);   
     }
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
@@ -852,6 +892,7 @@ void Process::SendPrevDecision(int recp, int tid)
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+        RemoveFromUpSet(recp);
     }
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
@@ -862,6 +903,35 @@ int Process::get_transaction_id()
 {
     return transaction_id_;
 }
+
+void Process::CloseFDs()
+{
+    for(auto it = fd_.begin(); it!=fd_.end(); it++)
+    {
+        if((*it)!=-1)
+            close(*it);
+    }
+}
+void Process::CloseAliveFDs()
+{
+
+    for(auto it = alive_fd_.begin(); it!=alive_fd_.end(); it++)
+    {
+        if((*it)!=-1)
+            close(*it);
+    }
+}
+void Process::CloseSDRFDs()
+{
+
+    for(auto it = sdr_fd_.begin(); it!=sdr_fd_.end(); it++)
+    {
+        if((*it)!=-1)
+            close(*it);
+    }
+}
+
+
 
 vector<string> split(string s, char delimiter)
 {

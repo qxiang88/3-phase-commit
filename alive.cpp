@@ -1,7 +1,9 @@
 #include "process.h"
 #include "constants.h"
 #include "iostream"
+#include "fstream"
 #include "unistd.h"
+#include "set"
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
@@ -35,6 +37,15 @@ void Process::UpdateUpSet(std::unordered_set<int> &alive_processes) {
         LogUp();
     }
 }
+
+void Process::RemoveFromUpSet(int k) {
+    pthread_mutex_lock(&up_lock);
+    if(up_.find(k)!=up_.end())
+        up_.erase(k);
+    pthread_mutex_unlock(&up_lock);
+    LogUp();
+}
+
 
 // function to initiate a connect() request to process _pid
 // returns true if connection was successfull
@@ -131,70 +142,132 @@ bool Process::ConnectToProcessAlive(int process_id) {
     // cout << "P" << get_pid() << ": Client: connecting to " << outgoing_port << endl ;
     freeaddrinfo(servinfo); // all done with this structure
     set_alive_fd(process_id, sockfd);
-    cout << "P" << get_pid() << ": Initiating ALIVE connection to P" << process_id << endl;
+    // cout << "P" << get_pid() << ": Initiating ALIVE connection to P" << process_id << endl;
     return true;
 }
 
+
+
+
+
+
+
+
+
+
 // thread for receiveing ALIVE messages from other processes
-void* ReceiveAlive(void *_p) {
-    Process *p = (Process *)_p;
+void* ReceiveAlive(void *_rcv_thread_arg) {
+    // cout<<"receive alive entered"<<endl;
+    ReceiveAliveThreadArgument *rcv_thread_arg = (ReceiveAliveThreadArgument *)_rcv_thread_arg;
+    Process *p = rcv_thread_arg->p;
+    int pid = rcv_thread_arg->pid_from_whom;
+
+    // if(p->get_my_coordinator()==p->get_pid())
+    //     usleep(kGeneralSleep);
+    
+    ofstream outf("log/recalivelog"+to_string(p->get_pid())+"from"+to_string(pid));
 
     char buf[kMaxDataSize];
     int num_bytes;
+    // map<int, set<string> > buffered_alives;
+    set<string> buffered_alives;
 
-    fd_set temp_set;
-    int fd_max;
+    // fd_set temp_set;
+    // int fd_max;
 
-    timeval zero = (struct timeval) {0};
+    // PrintUpSet(p->get_pid(), p->up_);
+    // usleep(kGeneralSleep);
     while (true) {
-        std::unordered_set<int> alive_processes;
-
+        // timeval zero;
+        // zero.tv_sec = 0;
+        // zero.tv_usec = 0;
         // no need to lock mutex here since updates to UP are perfomed
         // by this thread itself at the end.
-        FD_ZERO(&temp_set);
-        for (auto it = p->up_.begin(); it != p->up_.end(); ++it) {
-            FD_SET(p->get_alive_fd(*it), &temp_set);
-            fd_max = max(fd_max, *it);
-        }
-
+        // FD_ZERO(&temp_set);
+        // FD_SET(p->get_alive_fd(pid), &temp_set);
+        // fd_max = p->get_alive_fd(pid);
+        
+        string alive_to_check = "ALIVE"+to_string(time(NULL)%100);
         usleep(kReceiveAliveTimeout);
-
-        int rv = select(fd_max + 1, &temp_set, NULL, NULL, &zero);
-
+        
+        // int rv = select(fd_max + 1, &temp_set, NULL, NULL, &zero);
+        int rv = 0;
+        // cout<<"left select "<<endl;
         if (rv == -1) {
             cout << "P" << p->get_pid() << ": ERROR in select() in Alive receive" << endl;
             pthread_exit(NULL);
-        } else if (rv == 0) { // timeout
-            break;
-        } else {
-            for (auto it = p->up_.begin(); it != p->up_.end(); ++it) {
-                if (FD_ISSET(p->get_alive_fd(*it), &temp_set)) { // we got one!!
-                    if ((num_bytes = recv(p->get_alive_fd(*it), buf, kMaxDataSize - 1, 0)) == -1) {
-                        cout << "P" << p->get_pid() << ": ERROR in receiving ALIVE for P" << *it << endl;
-                        pthread_exit(NULL); //TODO: think about whether it should be exit or not
-                    } else if (num_bytes == 0) {     //connection closed
-                        cout << "P" << p->get_pid() << ": ALIVE connection closed by P" << *it << endl;
-                    } else {
-                        buf[num_bytes] = '\0';
-                        // cout << "P" << p->get_pid() << ": Msg received from P" << *it << ": " << buf <<  endl;
-                        if (string(buf) == kAlive) {
-                            alive_processes.insert(*it);
-                        }
-                    }
+        } 
+        else 
+        {
+            num_bytes = recv(p->get_alive_fd(pid), buf, kMaxDataSize - 1, 0);
+            if (num_bytes == -1 || num_bytes==0) 
+            {
+                // cout << "P" << p->get_pid() << ": ERROR in receiving ALIVE for P" << pid << endl;
+                    p->RemoveFromUpSet(pid);
+                    // pthread_mutex_lock(&up_lock);
+                    // unordered_set <int> copy_up(p->up_);
+                    // pthread_mutex_unlock(&up_lock);
+                    // PrintUpSet(p->get_pid(), copy_up);
+                    return NULL;
+                // pthread_exit(NULL); //TODO: think about whether it should be exit or not
+            } 
+            else 
+            {
+                buf[num_bytes] = '\0';
+                outf << "P" << p->get_pid() << ": ALIVE received from P" << pid << ": "  <<buf<< " at "<< time(NULL)%100 <<  endl;
+
+                string bufstring(buf);
+
+                vector<string> all_msgs = split(bufstring,' ');
+                for(auto iter = all_msgs.begin(); iter!=all_msgs.end(); iter++)
+                {
+                    buffered_alives.insert(*iter);    
+                    // cout<<"inserting into "<<pid<<" "<<*iter<<endl;
                 }
+
+                // cout<<p->get_pid()<<" looking for "<<alive_to_check<<" from "<<pid<<endl;
+                
+                // for(auto xit = buffered_alives.begin(); xit!=buffered_alives.end(); xit++)
+                    // cout<<*xit<<" ";
+                // cout<<endl;
+
+                // set<string>::iterator iter=buffered_alives.find(alive_to_check);
+                // if(iter!=buffered_alives.end())
+                // {
+
+                // }
+                //     // alive_processes.insert(pid);
+                // else
+                // {
+                //     cout<<"didnt find "<<alive_to_check<<" for "<<pid<<endl;
+                //     p->RemoveFromUpSet(pid);
+                //     pthread_mutex_lock(&up_lock);
+                //     unordered_set <int> copy_up(p->up_);
+                //     pthread_mutex_unlock(&up_lock);
+                //     PrintUpSet(p->get_pid(), copy_up);
+                // }
             }
         }
-        p->UpdateUpSet(alive_processes);
+      
+        
     }
 }
+      // }
+        // }
+        // p->UpdateUpSet(alive_processes);
+
 
 // thread for sending ALIVE messages to up_ processes
 //todo: lock
 void* SendAlive(void *_p) {
     Process *p = (Process *)_p;
-    string msg = kAlive;
+    // if(p->get_my_coordinator()==p->get_pid())
+    //     usleep(kGeneralSleep);
+    ofstream outf("log/sendalivelog"+to_string(p->get_pid()));
     while (true) {
-
+        string msg = kAlive;
+        msg+=to_string(time(NULL)%100);
+        msg+=" ";
         pthread_mutex_lock(&up_lock);
         unordered_set<int> up_copy(p->up_);
         pthread_mutex_unlock(&up_lock);
@@ -203,7 +276,7 @@ void* SendAlive(void *_p) {
         while (it != up_copy.end()) {
             if (send(p->get_alive_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
                 if (errno == ECONNRESET) {  // connection reset by peer
-                    cout << "P" << p->get_pid() << ": ALIVE connection reset by P" << (*it) << ". Removing it from UP set" << endl;
+                    // cout << "P" << p->get_pid() << ": ALIVE connection reset by P" << (*it) << ". Removing it from UP set" << endl;
                     // remove this process from up_ set
                     //TODO: Hopefully, receive will timeout soon
                     // and will remove it from UP set
@@ -213,7 +286,7 @@ void* SendAlive(void *_p) {
                 }
             }
             else {
-                // cout << "P" << p->get_pid() << ": ALIVE sent to P" << (*it) << " at "<< time(NULL)%100 << endl;
+                outf << "P" << p->get_pid() << ": ALIVE sent to P" << (*it) << " at "<< time(NULL)%100 << endl;
                 it++;
             }
         }
@@ -221,4 +294,13 @@ void* SendAlive(void *_p) {
         usleep(kSendAliveInterval);
     }
     cout << "Exiting" << endl;
+}
+
+void PrintUpSet(int whose, unordered_set<int> up_)
+{
+    ofstream outf("log/up"+to_string(whose), fstream::app);
+    outf<<whose<<"_up at "<<time(NULL)%100<<" : ";
+    for(auto it = up_.begin(); it!=up_.end(); it++ )
+        outf<<(*it)<<" ";
+    outf<<endl;
 }
