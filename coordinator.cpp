@@ -88,7 +88,7 @@ void Process::WaitForVotes() {
         }
         i++;
     }
-
+    
     void* status;
     
     i = 0;
@@ -164,10 +164,10 @@ void Process::WaitForStates() {
         rcv_thread_arg[i]->pid = it->first;
         rcv_thread_arg[i]->transaction_id = transaction_id_;
         rcv_thread_arg[i]->st = UNINITIALIZED;
-        // if (pthread_create(&receive_thread[i], NULL, ReceiveStateFromParticipant, (void *)rcv_thread_arg[i])) {
-        //     cout << "P" << get_pid() << ": ERROR: Unable to create receive thread for P" << get_pid() << endl;
-        //     pthread_exit(NULL);
-        // }
+        if (pthread_create(&receive_thread[i], NULL, ReceiveStateFromParticipant, (void *)rcv_thread_arg[i])) {
+            cout << "P" << get_pid() << ": ERROR: Unable to create receive thread for P" << get_pid() << endl;
+            pthread_exit(NULL);
+        }
         i++;
     }
     
@@ -422,6 +422,7 @@ void* ReceiveStateFromParticipant(void* _rcv_thread_arg) {
 void Process::CoordinatorMode() {
     //TODO: find a better way to set coordinator
     set_my_coordinator(0);
+
     //TODO: handle transaction IDs
     //TODO: increment it
     //TODO: send it to ConstructVoteReq;
@@ -429,12 +430,30 @@ void Process::CoordinatorMode() {
     // connect to each participant
     for (int i = 0; i < N; ++i) {
         if (i == get_pid()) continue;
-        if (ConnectToProcess(i))
+        if (ConnectToProcess(i)) {
             participant_state_map_.insert(make_pair(i, UNINITIALIZED));
+            // setup alive connection to this process
+            if (ConnectToProcessAlive(i)) {
+                up_.insert(i);
+            } else {
+                // Practically, this should not happen, since it just connected to i.
+                // TODO: not handling this rare case presently
+                // this causes up_ to deviate from participant_state_map_ at the beginning
+                cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << i << endl;
+            }
+        }
     }
+    // usleep(kGeneralSleep); //sleep to make sure connections are established
+
+    pthread_t send_alive_thread, receive_alive_thread;
+    CreateAliveThreads(receive_alive_thread, send_alive_thread);
+
+    pthread_t rec_sr_dr_thread;
+    CreateSDRThread(rec_sr_dr_thread);
 
     string msg;
     ConstructVoteReq(msg);
+
     SendVoteReqToAll(msg);
     LogStart();
     WaitForVotes();
@@ -464,6 +483,10 @@ void Process::CoordinatorMode() {
             }
         }
     } else {
+        
+        //testing
+        sleep(5);
+
         LogPreCommit();
         SendPreCommitToAll();
         WaitForAck();
@@ -472,60 +495,63 @@ void Process::CoordinatorMode() {
     }
 }
 
-void Process::NewCoordinatorMode() {    
+void* NewCoordinatorMode(void * _p) {    
     //TODO: send tid to ConstructVoteReq;
-
+    Process *p = (Process *)_p;
+    cout<<"NewCoordSet"<<p->get_pid()<<endl;
     // connect to each participant
-    participant_state_map_.clear();
+    p->participant_state_map_.clear();
     //set participant state map but only those processes that are alive
-    for (auto it = up_.begin(); it!=up_.end(); it++) {
-        if (*it == get_pid()) continue;
-        if (ConnectToProcess(*it))
-            participant_state_map_.insert(make_pair(*it, UNINITIALIZED));
+    for (auto it = p->up_.begin(); it!=p->up_.end(); it++) {
+        if (*it == p->get_pid()) continue;
+        if (p->ConnectToProcess(*it))
+            p->participant_state_map_.insert(make_pair(*it, UNINITIALIZED));
     }
 
     string msg;
-    ConstructStateReq(msg);
-    SendStateReqToAll(msg);
-    WaitForStates();
+    p->ConstructStateReq(msg);
+    
+    p->SendStateReqToAll(msg);
+    p->WaitForStates();
 
+    ProcessState my_state_ = p->get_my_state();
     // iterate through the states of all processes
     // bool abort = false, committed = false, commit = false, ;
     //ProcessState key = ABORTED;
-    auto it = participant_state_map_.find(ABORTED);
-    if (my_state_ == ABORTED || it!=participant_state_map_.end())
+    auto it = p->participant_state_map_.find(ABORTED);
+    if (my_state_ == ABORTED || it!=p->participant_state_map_.end())
     {
         if (my_state_ != ABORTED)
         {
-            LogAbort();
+            p->LogAbort();
                    //only log if other process is abort. 
                 //if i know aborted, means already in log abort
             my_state_ = ABORTED;
         }
 
-        for (const auto& ps : participant_state_map_) {
-            SendAbortToProcess(ps.first);
+        for (const auto& ps : p->participant_state_map_) {
+            p->SendAbortToProcess(ps.first);
         }
 
-        return;
+        return NULL;
     }
     
     // key = COMMITTED;
-    it = participant_state_map_.find(COMMITTED);
-    if (my_state_ == COMMITTED || it!=participant_state_map_.end())
+    it = p->participant_state_map_.find(COMMITTED);
+    if (my_state_ == COMMITTED || it!=p->participant_state_map_.end())
     {
         if (my_state_ != COMMITTED)
         {
-            LogCommit();
+            p->LogCommit();
             my_state_ = COMMITTED;
         }
-        SendCommitToAll();
-        return;
+        p->SendCommitToAll();
+        return NULL;
     }
 
 
     bool uncert = true;
-    for (const auto& ps : participant_state_map_) {
+    for (const auto& ps : p->participant_state_map_) {
         if(ps.second!=UNCERTAIN)
         {
             uncert = false;
@@ -534,22 +560,22 @@ void Process::NewCoordinatorMode() {
     }
     if(uncert && my_state_==UNCERTAIN)
     {
-        LogAbort();
-        for (const auto& ps : participant_state_map_) {
-            SendAbortToProcess(ps.first);
+        p->LogAbort();
+        for (const auto& ps : p->participant_state_map_) {
+            p->SendAbortToProcess(ps.first);
         }
-        return;
+        return NULL;
     }
 
     //else
     //some are commitable
-    LogPreCommit();
-    for (const auto& ps : participant_state_map_) {
+    p->LogPreCommit();
+    for (const auto& ps : p->participant_state_map_) {
         if(ps.second == UNCERTAIN)
-            SendPreCommitToProcess(ps.first);
+            p->SendPreCommitToProcess(ps.first);
     }
-    WaitForAck();
-    LogCommit();
-    SendCommitToAll();
-    return;
+    p->WaitForAck();
+    p->LogCommit();
+    p->SendCommitToAll();
+    return NULL;
 }

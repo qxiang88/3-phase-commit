@@ -15,6 +15,7 @@ using namespace std;
 // sets transaction_msg to the extracted transaction msg above
 // sets the transaction_id_ variable
 // populates participants_ vector
+// DOES NOT populate up_ vector
 // returns true if VOTE-REQ is received
 bool Process::ExtractFromVoteReq(const string &msg, string &transaction_msg ) {
     bool ret;
@@ -71,6 +72,7 @@ bool Process::ExtractFromVoteReq(const string &msg, string &transaction_msg ) {
 // sets transaction_msg to the extracted transaction msg above
 // sets the transaction_id_ variable
 // populates participants_ vector
+// DOES NOT populate up_ vector
 bool Process::WaitForVoteReq(string &transaction_msg) {
     int pid = my_coordinator_;
     bool ret;
@@ -88,6 +90,7 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
         pthread_exit(NULL);
     } else if (rv == 0) {   //timeout
+        // cout<<"TIMEOUT"<<endl;
         my_state_ = ABORTED;
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
@@ -234,29 +237,58 @@ void Process::ReceiveCommitFromCoordinator() {
     cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
 }
 
+// ALIVE connect to each process in participants_ list
+// adds them to the UP set.
+void Process::ConstructUpSet() {
+    up_.insert(my_coordinator_);
+    for (auto const &p : participants_) {
+        if (p == get_pid()) continue;
+        cout<<p<<endl;
+        if (ConnectToProcessAlive(p)) {
+            up_.insert(p);
+        } else {
+            //TODO: I don't think we need to do anything special
+            // apart from not adding participant_[i] to the upset.
+            cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << p << endl;
+        }
+    }
+    cout<<"END"<<endl;
+}
+
 // Function for a process which behaves as a normal participant
 // normal participant means one who has not suffered a failure
 void Process::ParticipantMode() {
 
     //create SR thread here
 
-    usleep(kGeneralSleep); //sleep to make sure connections are established
     //TODO: find a better way to set coordinator
     set_my_coordinator(0);
 
     // connect to coordinator
-    if (!ConnectToProcess(my_coordinator_)) {
-        my_coordinator_ = -1;
-        // unable to connect to coordinator
-        // (is it really required to )start election protocol
-    }
+    // if (!ConnectToProcess(my_coordinator_)) {
+    //     my_coordinator_ = -1;
+    //     // unable to connect to coordinator
+    //     // (is it really required to )start election protocol
+    // }
+
     usleep(kGeneralSleep); //sleep to make sure connections are established
 
     string transaction_msg;
     if (!WaitForVoteReq(transaction_msg)) {
         // Some error happened in rcving VOTE REQ
         // TODO: check if special actions required
+    } else { // VOTE-REQ received.
+        ConstructUpSet();
+
+        pthread_t send_alive_thread, receive_alive_thread;
+        CreateAliveThreads(receive_alive_thread, send_alive_thread);
+
+
+        pthread_t rec_sr_dr_thread;
+        CreateSDRThread(rec_sr_dr_thread);
+        // usleep(kGeneralSleep); //sleep to make sure connections are established
     }
+
     if (my_state_ == ABORTED) {
         //ignore log as doesnt matter when participant doesnt get votereq
         return;
@@ -265,16 +297,21 @@ void Process::ParticipantMode() {
     //else
     LogVoteReq();
     Vote(transaction_msg);
-    if (my_state_ ==  ABORTED) { //participant's vote was NO
+
+    if (my_state_ ==  ABORTED) 
+    { //participant's vote was NO
         SendMsgToCoordinator(kNo);
         LogAbort();
-    } else { //participant's vote was YES
+    } 
+    else 
+    { //participant's vote was YES
         LogYes();
         SendMsgToCoordinator(kYes);
         ReceivePreCommitOrAbortFromCoordinator();
 
         if (my_state_ == COMMITTABLE) 
         { // coord sent PRE-COMMIT
+            LogPreCommit();
             SendMsgToCoordinator(kAck);
             ReceiveCommitFromCoordinator();
             //this detects timeout, exits and state will be the same as intial
@@ -298,9 +335,17 @@ void Process::ParticipantMode() {
             Timeout();
         }
             // TODO: might need to check other values of my_state_
-            // because of results of termination protocol
-        } 
+            // because of results of termination protocol 
     }
+
+    //participant_termination_protocol
+    //wait till a) new_coord_thread exits (wait it will aslo exit when someone 
+    //                                     else becomes new coord) or
+    //          b) till new coord sends me dec
+    //      i can just wait till b if recv dec is handled by someone
+
+    
+//TODO: when participant recovers, make sure that it ignores STATE-REQ from new coord
 
     while(!(my_state_==ABORTED || my_state_==COMMITTED))
     {
@@ -311,7 +356,8 @@ void Process::ParticipantMode() {
 
     //if this participant is new coord, then it will have waited there to get a decision
     //else, we have to log abort or commit in SR thread receiving part
-    }    
+    }  
+    prev_decision_ = my_state_;  
 }
 
 
@@ -327,8 +373,5 @@ void Process::ParticipantMode() {
 //start this thread initially in participant mode
 void* ReceiveStateOrDecisionRequest(void* _p) {
         Process *p = (Process *)_p;
-
-
-
 
 }

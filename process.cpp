@@ -12,14 +12,64 @@
 using namespace std;
 
 pthread_mutex_t fd_lock;
+pthread_mutex_t alive_fd_lock;
+pthread_mutex_t sdr_fd_lock;
 ReceivedMsgType received_msg_type;
 pthread_mutex_t log_lock;
+
+// entry function for a process created normally by the controller
+// normally means it is the first time this process has been spawned
+// no need to read log
+// if it is P0, declare self as coordinator
+void* ThreadEntry(void* _p) {
+    Process *p = (Process *)_p;
+    p->InitializeLocks();
+
+    if (!(p->LoadPlaylist())) {
+        cout << "P" << p->get_pid() << ": Exiting" << endl;
+        pthread_exit(NULL);
+    }
+
+    // pthread_t logger_thread;
+    // if (pthread_create(&logger_thread, NULL, p->AddToLog(), (void *)p)) {
+    //     cout << "P" << p->get_pid() << ": ERROR: Unable to create logger thread for P" << p->get_pid() << endl;
+    //     pthread_exit(NULL);
+    // }
+
+    // TODO: share all internal thread info with controller
+    // TODO: think whether we need to add the temporary receive threads as well?
+    pthread_t server_thread;
+    if (pthread_create(&server_thread, NULL, server, (void *)p)) {
+        cout << "P" << p->get_pid() << ": ERROR: Unable to create server thread for P" << p->get_pid() << endl;
+        pthread_exit(NULL);
+    }
+    
+    // sleep to make sure server is up and listening
+    usleep(kGeneralSleep);
+
+    // if pid=0, then it is the coordinator
+    //TODO: find a better way to set coordinator
+    if (p->get_pid() == 0) {
+        p->CoordinatorMode();
+        cout << "P" << p->get_pid() << ": Coordinator mode over" << endl;
+    } else {
+        p->ParticipantMode();
+        cout << "P" << p->get_pid() << ": Participant mode over" << endl;
+    }
+
+    void* status;
+    pthread_join(server_thread, &status);
+    pthread_exit(NULL);
+}
+
 
 void Process::Initialize(int pid, string log_file, string playlist_file) {
     pid_ = pid;
     log_file_ = log_file;
     playlist_file_ = playlist_file;
     fd_.resize(N, -1);
+    alive_fd_.resize(N, -1);
+    sdr_fd_.resize(N, -1);
     process_state_.resize(N, UNINITIALIZED);
     my_state_ = UNINITIALIZED;
     transaction_id_ = 0;
@@ -41,6 +91,8 @@ void Process::set_playlist_file(string playlistfile) {
     playlist_file_ = playlistfile;
 }
 
+// TODO: remember to set _fd_ to -1 on connection close
+// saves socket fd for connection from a send port
 void Process::set_fd(int process_id, int new_fd) {
     pthread_mutex_lock(&fd_lock);
     if (fd_[process_id] == -1)
@@ -50,11 +102,32 @@ void Process::set_fd(int process_id, int new_fd) {
     pthread_mutex_unlock(&fd_lock);
 }
 
+// TODO: remember to set fd_ to -1 on connection close
+// saves socket fd for connection from a send port
+void Process::set_sdr_fd(int process_id, int new_fd) {
+    pthread_mutex_lock(&sdr_fd_lock);
+    if (sdr_fd_[process_id] == -1)
+    {
+        sdr_fd_[process_id] = new_fd;
+    }
+    pthread_mutex_unlock(&sdr_fd_lock);
+}
+
+void Process::set_alive_fd(int process_id, int new_fd) {
+    pthread_mutex_lock(&alive_fd_lock);
+    if (alive_fd_[process_id] == -1)
+    {
+        alive_fd_[process_id] = new_fd;
+    }
+    pthread_mutex_unlock(&alive_fd_lock);
+}
+
 void Process::set_my_coordinator(int process_id) {
     my_coordinator_ = process_id;
     set_coordinator(process_id);
 }
 
+// get socket fd corresponding to process_id's send connection
 int Process::get_fd(int process_id) {
     int ret;
     pthread_mutex_lock(&fd_lock);
@@ -63,6 +136,33 @@ int Process::get_fd(int process_id) {
     return ret;
 }
 
+// get socket fd corresponding to process_id's alive connection
+int Process::get_alive_fd(int process_id) {
+    int ret;
+    pthread_mutex_lock(&alive_fd_lock);
+    ret = alive_fd_[process_id];
+    pthread_mutex_unlock(&alive_fd_lock);
+    return ret;
+}
+
+int Process::get_sdr_fd(int process_id) {
+    int ret;
+    pthread_mutex_lock(&sdr_fd_lock);
+    ret = sdr_fd_[process_id];
+    pthread_mutex_unlock(&sdr_fd_lock);
+    return ret;
+}
+
+
+ProcessState Process::get_my_state()
+{
+    return my_state_;
+}
+
+int Process::get_my_coordinator()
+{
+    return my_coordinator_;
+}
 // print function for debugging purposes
 void Process::Print() {
     cout << "pid=" << get_pid() << " ";
@@ -177,53 +277,41 @@ void Process::InitializeLocks() {
         pthread_exit(NULL);
     }
 
+    if (pthread_mutex_init(&alive_fd_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+
+    if (pthread_mutex_init(&sdr_fd_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
     if (pthread_mutex_init(&log_lock, NULL) != 0) {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
         pthread_exit(NULL);
     }
 }
 
-// entry function for a process created normally by the controller
-// normally means it is the first time this process has been spawned
-// no need to read log
-// if it is P0, declare self as coordinator
-void* ThreadEntry(void* _p) {
-    Process *p = (Process *)_p;
-    p->InitializeLocks();
-
-    if (!(p->LoadPlaylist())) {
-        cout << "P" << p->get_pid() << ": Exiting" << endl;
+// creates one receive alive thread
+// creates one send-alive thread
+void Process::CreateAliveThreads(pthread_t &receive_alive_thread, pthread_t &send_alive_thread) {
+    if (pthread_create(&send_alive_thread, NULL, SendAlive, (void *)this)) {
+    cout << "P" << get_pid() << ": ERROR: Unable to create send-alive thread" << endl;
         pthread_exit(NULL);
     }
 
-    // pthread_t logger_thread;
-    // if (pthread_create(&logger_thread, NULL, p->AddToLog(), (void *)p)) {
-    //     cout << "P" << p->get_pid() << ": ERROR: Unable to create logger thread for P" << p->get_pid() << endl;
-    //     pthread_exit(NULL);
-    // }
-
-
-    pthread_t server_thread;
-    if (pthread_create(&server_thread, NULL, server, (void *)p)) {
-        cout << "P" << p->get_pid() << ": ERROR: Unable to create server thread for P" << p->get_pid() << endl;
+    if (pthread_create(&receive_alive_thread, NULL, ReceiveAlive, (void *)this)) {
+    cout << "P" << get_pid() << ": ERROR: Unable to create receive-alive thread" << endl;
         pthread_exit(NULL);
     }
-    // sleep to make sure server is up and listening
-    usleep(kGeneralSleep);
+}
 
-    // if pid=0, then it is the coordinator
-    //TODO: find a better way to set coordinator
-    if (p->get_pid() == 0) {
-        p->CoordinatorMode();
-        cout << "P" << p->get_pid() << ": Coordinator mode over" << endl;
-    } else {
-        p->ParticipantMode();
-        cout << "P" << p->get_pid() << ": Participant mode over" << endl;
+void Process::CreateSDRThread(pthread_t &rec_sr_dr_thread) {
+
+    if (pthread_create(&rec_sr_dr_thread, NULL, ReceiveStateOrDecReq, (void *)this)) {
+    cout << "P" << get_pid() << ": ERROR: Unable to create SDR thread" << endl;
+        pthread_exit(NULL);
     }
-
-    void* status;
-    pthread_join(server_thread, &status);
-    pthread_exit(NULL);
 }
 
 void Process::AddToLog(string s, bool new_round)
@@ -437,12 +525,19 @@ void Process::TerminationProtocol()
 {   //called when a process times out.
     
     //sets new coord
+    cout<<"TerminationProtocol"<<endl;
     ElectionProtocol(); 
 
     if(pid_==my_coordinator_)
     {//coord case
         //pass on arg saying total failue, then send to all
-        NewCoordinatorMode();   
+
+        if (pthread_create(&newcoord_thread, NULL, NewCoordinatorMode, (void *) this)) 
+        {
+            cout << "P" << get_pid() << ": ERROR: Unable to create new coord thread" << endl;
+            pthread_exit(NULL);
+        }
+    
     }
     else
     {
@@ -458,11 +553,21 @@ void Process::ElectionProtocol()
 {
     int min = GetNewCoordinator();
     set_my_coordinator(min);
+    cout<<"P"<<pid_<<": my new coordinator="<<min<<endl;
 }
 
-void Process::SendURElected(int p)
+void Process::SendURElected(int recp)
 {
     //send it on SR thread only
+    string msg;
+    string msg_to_send = kURElected;
+    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
+        cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+    }
+    else {
+        cout << "P" << get_pid() << ": URElected Msg sent to P" << recp << ": " << msg << endl;
+    }
 
 }
 
@@ -518,7 +623,7 @@ void Process::LogVoteReq()
         s+=to_string(*it);
     }
 
-    AddToLog(s);
+    AddToLog(s,true);
 }
 
 void Process::LogStart()
@@ -542,7 +647,23 @@ void Process::LogStart()
     AddToLog(s, true);
 }
 
+void Process::SendState(int recp)
+{
+    string msg;
+    string msg_to_send = to_string((int)my_state_);
+    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
+        cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+    }
+    else {
+        cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
+    }
+}
 
+int Process::get_transaction_id()
+{
+    return transaction_id_;
+}
 
 vector<string> split(string s, char delimiter)
 {

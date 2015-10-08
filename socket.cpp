@@ -33,6 +33,7 @@ void sigchld_handler(int s) {
 
 // function to initiate a connect() request to process _pid
 // returns true if connection was successfull
+// this connection is corresponding to the send connection
 bool Process::ConnectToProcess(int process_id) {
     int sockfd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *clientinfo, *l;
@@ -124,12 +125,7 @@ bool Process::ConnectToProcess(int process_id) {
     int outgoing_port = ntohs(return_port_no((struct sockaddr *)l->ai_addr));
     // cout << "P" << get_pid() << ": Client: connecting to " << outgoing_port << endl ;
     freeaddrinfo(servinfo); // all done with this structure
-    // if (_pid != PID)
-    // {
     set_fd(process_id, sockfd);
-    // add the new fd to the fd sets
-    // AddToFdSet(sockfd);
-    // }
     cout << "P" << get_pid() << ": Initiating connection to P" << process_id << endl;
     return true;
 }
@@ -211,22 +207,24 @@ void* server(void* _p) {
         }
 
         int incoming_port = ntohs(return_port_no((struct sockaddr *)&their_addr));
-        //update fd only if msg recvd from some other process
-        // if (incoming_port != atoi((P->get_send_port_no(PID)).c_str()))
-        // {
         int process_id = p->get_send_port_pid_map(incoming_port);
-        // cout << "P" << p->get_pid() << ": Server: accepting connection from port" << incoming_port << endl;
-        p->set_fd(process_id, new_fd);
-        // add the new fd to the fd sets
-        // p->AddToFdSet(new_fd);
-
-        // }
-        cout << "P" << p->get_pid() << ": Server: accepting connection from P" << p->get_send_port_pid_map(incoming_port) << endl;
-        int child_pid = fork();
-        if (child_pid == 0) {   // this is the child process
-            exit(0);
+        if (process_id != -1) {   // incoming connection is from send_port
+            p->set_fd(process_id, new_fd);
+            cout << "P" << p->get_pid() << ": Server: accepting connection from P"
+                 << p->get_send_port_pid_map(incoming_port) << endl;
+        } else {    
+            process_id = p->get_alive_port_pid_map(incoming_port);
+            if(process_id != -1) { // incoming connection is from alive port
+                p->set_alive_fd(process_id, new_fd);
+                cout << "P" << p->get_pid() << ": Server: accepting ALIVE connection from P"
+                     << p->get_alive_port_pid_map(incoming_port) << endl;
+            } else {
+                process_id = p->get_sdr_port_pid_map(incoming_port);
+                p->set_sdr_fd(process_id, new_fd);
+                    cout << "P" << p->get_pid() << ": Server: accepting SDR connection from P"
+                         << p->get_sdr_port_pid_map(incoming_port) << endl;
+            }
         }
     }
-
     pthread_exit(NULL);
 }
