@@ -252,7 +252,6 @@ void Process::ConstructUpSet() {
             cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << p << endl;
         }
     }
-    cout<<"END"<<endl;
 }
 
 // Function for a process which behaves as a normal participant

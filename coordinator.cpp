@@ -81,19 +81,16 @@ void Process::WaitForVotes() {
         rcv_thread_arg[i]->transaction_id = transaction_id_;
         rcv_thread_arg[i]->expected_msg1 = kYes;
         rcv_thread_arg[i]->expected_msg2 = kNo;
-
-        if (pthread_create(&receive_thread[i], NULL, ReceiveVoteFromParticipant, (void *)rcv_thread_arg[i])) {
-            cout << "P" << get_pid() << ": ERROR: Unable to create receive thread for P" << get_pid() << endl;
-            pthread_exit(NULL);
-        }
+        CreateThread(receive_thread[i], ReceiveVoteFromParticipant, (void *)rcv_thread_arg[i]);
         i++;
     }
-    
+
     void* status;
-    
+
     i = 0;
     for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         pthread_join(receive_thread[i], &status);
+        RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->received_msg_type) == ERROR) {
             //TODO: not necessarily. handle
             pthread_exit(NULL);
@@ -127,10 +124,7 @@ void Process::WaitForAck() {
         rcv_thread_arg[i]->transaction_id = transaction_id_;
         rcv_thread_arg[i]->expected_msg1 = kAck;
         rcv_thread_arg[i]->expected_msg2 = "NULL";
-        if (pthread_create(&receive_thread[i], NULL, ReceiveAckFromParticipant, (void *)rcv_thread_arg[i])) {
-            cout << "P" << get_pid() << ": ERROR: Unable to create receive thread for P" << get_pid() << endl;
-            pthread_exit(NULL);
-        }
+        CreateThread(receive_thread[i], ReceiveAckFromParticipant, (void *)rcv_thread_arg[i]);
         i++;
     }
 
@@ -138,6 +132,7 @@ void Process::WaitForAck() {
     i = 0;
     for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         pthread_join(receive_thread[i], &status);
+        RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->received_msg_type) == ERROR) {
             //TODO: not necessarily. handle
             pthread_exit(NULL);
@@ -164,17 +159,15 @@ void Process::WaitForStates() {
         rcv_thread_arg[i]->pid = it->first;
         rcv_thread_arg[i]->transaction_id = transaction_id_;
         rcv_thread_arg[i]->st = UNINITIALIZED;
-        if (pthread_create(&receive_thread[i], NULL, ReceiveStateFromParticipant, (void *)rcv_thread_arg[i])) {
-            cout << "P" << get_pid() << ": ERROR: Unable to create receive thread for P" << get_pid() << endl;
-            pthread_exit(NULL);
-        }
+        CreateThread(receive_thread[i], ReceiveStateFromParticipant, (void *)rcv_thread_arg[i]);
         i++;
     }
-    
+
     void* status;
     i = 0;
     for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         pthread_join(receive_thread[i], &status);
+        RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->received_msg_type) == ERROR) {
             //TODO: not necessarily. handle
             pthread_exit(NULL);
@@ -244,7 +237,7 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
     string msg1 = rcv_thread_arg->expected_msg1;    //YES vote
     string msg2 = rcv_thread_arg->expected_msg2;    //NO vote
     Process *p = rcv_thread_arg->p;
-    
+
     char buf[kMaxDataSize];
     int num_bytes;
     //TODO: write code to extract multiple messages
@@ -265,7 +258,7 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
             rcv_thread_arg->received_msg_type = ERROR;
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;        
+            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
             // if participant closes connection, it is equivalent to it crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
@@ -380,7 +373,7 @@ void* ReceiveStateFromParticipant(void* _rcv_thread_arg) {
             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
             rcv_thread_arg->received_msg_type = ERROR;
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;        
+            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
             // if participant closes connection, it is equivalent to it crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
@@ -486,9 +479,6 @@ void Process::CoordinatorMode() {
             }
         }
     } else {
-        
-        //testing
-        sleep(5);
 
         LogPreCommit();
         SendPreCommitToAll();
@@ -506,14 +496,14 @@ void Process::CoordinatorMode() {
         prev_decisions_.push_back(COMMIT);
 }
 
-void* NewCoordinatorMode(void * _p) {    
+void* NewCoordinatorMode(void * _p) {
     //TODO: send tid to ConstructVoteReq;
     Process *p = (Process *)_p;
-    cout<<"NewCoordSet"<<p->get_pid()<<endl;
+    cout << "NewCoordSet" << p->get_pid() << endl;
     // connect to each participant
     p->participant_state_map_.clear();
     //set participant state map but only those processes that are alive
-    for (auto it = p->up_.begin(); it!=p->up_.end(); it++) {
+    for (auto it = p->up_.begin(); it != p->up_.end(); it++) {
         if (*it == p->get_pid()) continue;
         if (p->ConnectToProcess(*it))
             p->participant_state_map_.insert(make_pair(*it, UNINITIALIZED));
@@ -521,7 +511,7 @@ void* NewCoordinatorMode(void * _p) {
 
     string msg;
     p->ConstructStateReq(msg);
-    
+
     p->SendStateReqToAll(msg);
     p->WaitForStates();
 
@@ -530,16 +520,15 @@ void* NewCoordinatorMode(void * _p) {
     // bool abort = false, committed = false, commit = false, ;
     //ProcessState key = ABORTED;
     auto it = p->participant_state_map_.find(ABORTED);
-    if (my_state_ == ABORTED || it!=p->participant_state_map_.end())
+    if (my_state_ == ABORTED || it != p->participant_state_map_.end())
     {
         if (my_state_ != ABORTED)
         {
             p->LogAbort();
+            //only log if other process is abort. 
+            //if i know aborted, means already in log abort            
             my_state_ = ABORTED;
 
-                   //only log if other process is abort. 
-                //if i know aborted, means already in log abort
-            
         }
 
         for (const auto& ps : p->participant_state_map_) {
@@ -548,10 +537,10 @@ void* NewCoordinatorMode(void * _p) {
 
         return NULL;
     }
-    
+
     // key = COMMITTED;
     it = p->participant_state_map_.find(COMMITTED);
-    if (my_state_ == COMMITTED || it!=p->participant_state_map_.end())
+    if (my_state_ == COMMITTED || it != p->participant_state_map_.end())
     {
         if (my_state_ != COMMITTED)
         {
@@ -567,13 +556,13 @@ void* NewCoordinatorMode(void * _p) {
 
     bool uncert = true;
     for (const auto& ps : p->participant_state_map_) {
-        if(ps.second!=UNCERTAIN)
+        if (ps.second != UNCERTAIN)
         {
             uncert = false;
             break;
         }
     }
-    if(uncert && my_state_==UNCERTAIN)
+    if (uncert && my_state_ == UNCERTAIN)
     {
         p->LogAbort();
         for (const auto& ps : p->participant_state_map_) {
@@ -586,7 +575,7 @@ void* NewCoordinatorMode(void * _p) {
     //some are commitable
     p->LogPreCommit();
     for (const auto& ps : p->participant_state_map_) {
-        if(ps.second == UNCERTAIN)
+        if (ps.second == UNCERTAIN)
             p->SendPreCommitToProcess(ps.first);
     }
     p->WaitForAck();
@@ -594,9 +583,9 @@ void* NewCoordinatorMode(void * _p) {
     p->SendCommitToAll();
 
     if(my_state_==ABORTED)
-        prev_decisions_.push_back(ABORT);
+        p->prev_decisions_.push_back(ABORT);
     else
-        prev_decisions_.push_back(COMMIT);
+        p->prev_decisions_.push_back(COMMIT);
 
     return NULL;
 }

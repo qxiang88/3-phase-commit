@@ -178,11 +178,7 @@ void* ReceiveStateOrDecReq(void *_p) {
 	                        		p->set_my_coordinator(*it);
 
                                     pthread_cancel(sr_response_thread);
-                                    
-                                    if (pthread_create(&sr_response_thread, NULL, responder, (void *)p)) {
-                                        cout << "P" << p->get_pid() << ": ERROR: Unable to create responder thread for P" << p->get_pid() << endl;
-                                        pthread_exit(NULL);
-                                    }
+                                    p->CreateThread(sr_response_thread, responder, (void *)p);
 	                        		//whyat shud be my mode now
 	                        	}
 
@@ -196,11 +192,7 @@ void* ReceiveStateOrDecReq(void *_p) {
 
                                     pthread_cancel(sr_response_thread);
                                     //create responder thread
-                                    if (pthread_create(&sr_response_thread, NULL, responder, (void *)p)) 
-                                    {
-                                        cout << "P" << p->get_pid() << ": ERROR: Unable to create responder thread for P" << p->get_pid() << endl;
-                                        pthread_exit(NULL);
-                                    }
+                                    p->CreateThread(sr_response_thread, responder, (void *)p);
 
 	                        	}
 	                        }
@@ -210,23 +202,18 @@ void* ReceiveStateOrDecReq(void *_p) {
 	                    {	
                             if(p->get_my_coordinator()==p->get_pid())
                                 continue;
-
-                            if (pthread_create(&(p->newcoord_thread), NULL, NewCoordinatorMode, (void *) p)) 
-                            {
-                                cout << "P" << p->get_pid() << ": ERROR: Unable to create new coord thread" << endl;
-                                pthread_exit(NULL);
-                            }
+                            p->CreateThread(p->newcoord_thread, NewCoordinatorMode, (void *)p);
 	                    }
                         else{//decreq
                             if(recvd_tid==p->get_transaction_id())
                             {
-                                if(my_state_==COMMITTED || my_state_==ABORTED)
-                                    SendDecision((*it));
+                                if(p->get_my_state()==COMMITTED || p->get_my_state()==ABORTED)
+                                    p->SendDecision((*it));
                             }
                             else if(recvd_tid < p->get_transaction_id())
                             {
                                 // if(my_state_==COMMITTED || my_state_==ABORTED)
-                                SendPrevDecision((*it), recvd_tid);
+                                p->SendPrevDecision((*it), recvd_tid);
                             }
                         }
 

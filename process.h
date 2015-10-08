@@ -16,7 +16,7 @@ extern void* responder(void *_p);
 extern void* ReceiveVoteFromParticipant(void* _rcv_thread_arg);
 extern void* ReceiveAckFromParticipant(void* _rcv_thread_arg);
 extern void* ReceiveStateFromParticipant(void* _rcv_thread_arg);
-extern void* SendAlive(void *_p);   
+extern void* SendAlive(void *_p);
 extern void* ReceiveAlive(void *_p);
 extern void* ReceiveStateOrDecReq(void *_p);
 extern void* ReceiveDecision(void *_p);
@@ -78,7 +78,12 @@ public:
     void UpdateUpSet(std::unordered_set<int> &alive_processes);
     void ConstructUpSet();
     void SendState(int);
-    
+    void AddThreadToSet(pthread_t thread);
+    void RemoveThreadFromSet(pthread_t thread);
+    void CreateThread(pthread_t &thread, void* (*f)(void* ), void* arg);
+
+
+
 
     void Recovery();
     void Timeout();
@@ -134,6 +139,8 @@ public:
     std::unordered_map<int, ProcessState> participant_state_map_;
     pthread_t newcoord_thread;
     vector<Decision> prev_decisions_;
+    // set of all threads created by a process
+    std::unordered_set<pthread_t> thread_set;
 
 private:
     int pid_;
@@ -157,6 +164,7 @@ private:
     // to be used only by coordinator
     map<int, vector<string> > log_;
 
+
     // bool am_coordinator_;
 
     // the coordinator which this process perceives
@@ -171,7 +179,7 @@ private:
     int transaction_id_;
 
 
-    
+
 };
 
 struct ReceiveThreadArgument
