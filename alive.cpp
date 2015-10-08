@@ -60,7 +60,7 @@ void Process::UpdateUpSet(std::unordered_set<int> &alive_processes) {
 
     if (change) {
         //TODO: write new UP set to log
-        
+        LogUp();
     }
 }
 

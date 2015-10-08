@@ -217,12 +217,17 @@ void* ReceiveStateOrDecReq(void *_p) {
                                 pthread_exit(NULL);
                             }
 	                    }
-                        else{
-                            //dec req
-                            // if(recvd_tid==p->get_transaction_id())
-                            // {
-
-                            // }
+                        else{//decreq
+                            if(recvd_tid==p->get_transaction_id())
+                            {
+                                if(my_state_==COMMITTED || my_state_==ABORTED)
+                                    SendDecision((*it));
+                            }
+                            else if(recvd_tid < p->get_transaction_id())
+                            {
+                                // if(my_state_==COMMITTED || my_state_==ABORTED)
+                                SendPrevDecision((*it), recvd_tid);
+                            }
                         }
 
                     
@@ -250,11 +255,19 @@ void* responder(void *_p) {
         p->ReceivePreCommitOrAbortFromCoordinator();
         if(p->get_my_state()==UNCERTAIN)
             p->Timeout();
+        else if(p->get_my_state()==ABORTED)
+            p->LogAbort();
+        else{
+            p->LogPreCommit();
+        }
     }
     else{
         p->ReceiveCommitFromCoordinator();
         if(p->get_my_state()==COMMITTABLE)
             p->Timeout();
+        else{
+            p->LogCommit();
+        }
     }
 
     return NULL;

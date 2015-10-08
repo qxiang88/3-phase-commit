@@ -19,6 +19,7 @@ extern void* ReceiveStateFromParticipant(void* _rcv_thread_arg);
 extern void* SendAlive(void *_p);   
 extern void* ReceiveAlive(void *_p);
 extern void* ReceiveStateOrDecReq(void *_p);
+extern void* ReceiveDecision(void *_p);
 extern void* NewCoordinatorMode(void *_p);
 extern int return_port_no(struct sockaddr *sa);
 extern void sigchld_handler(int s);
@@ -33,6 +34,11 @@ typedef enum
 {
     ERROR, YES, NO, TIMEOUT, ACK
 } ReceivedMsgType;
+
+typedef enum
+{
+    ABORT, COMMIT
+} Decision;
 
 class Process : public Controller {
 public:
@@ -50,6 +56,7 @@ public:
     void ConstructStateReq(string &msg);
     void SendVoteReqToAll(const string &msg);
     void SendStateReqToAll(const string &msg);
+    void SendDecReqToAll(const string &msg);
     void WaitForVotes();
     void ExtractMsg(const string &received_msg, string &extracted_msg, int &received_tid);
     void Vote(string trans);
@@ -59,6 +66,7 @@ public:
     void SendPreCommitToProcess(int);
     void SendPreCommitToAll();
     void WaitForAck();
+    void WaitForDecisionResponse();
     void SendCommitToAll();
     bool ExtractFromVoteReq(const string &msg, string &transaction_msg );
     bool WaitForVoteReq(string &transaction_msg);
@@ -80,7 +88,8 @@ public:
     int GetNewCoordinator();
     void DecisionRequest();
     void WaitForStates();
-
+    void SendDecision(int);
+    void SendPrevDecision(int, int);
 
     void AddToLog(string s, bool new_round = false);
     int GetCoordinator();
@@ -89,14 +98,15 @@ public:
     string GetDecision();
     bool CheckCoordinator();
     void LoadTransactionId();
-    void LoadLog();
-
+    void LoadLogAndPrevDecisions();
+    void LoadUp();
     void LogCommit();
     void LogPreCommit();
     void LogAbort();
     void LogYes();
     void LogVoteReq();
     void LogStart();
+    void LogUp();
 
     vector<string> get_log();
     int get_pid();
@@ -123,7 +133,7 @@ public:
     unordered_set<int> participants_;
     std::unordered_map<int, ProcessState> participant_state_map_;
     pthread_t newcoord_thread;
-    ProcessState prev_decision_;
+    vector<Decision> prev_decisions_;
 
 private:
     int pid_;
@@ -178,6 +188,15 @@ struct ReceiveStateThreadArgument
 {
     Process *p;
     ProcessState st;
+    int pid;
+    int transaction_id;
+    ReceivedMsgType received_msg_type;
+};
+
+struct ReceiveDecThreadArgument
+{
+    Process *p;
+    Decision decision;
     int pid;
     int transaction_id;
     ReceivedMsgType received_msg_type;

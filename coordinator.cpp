@@ -474,7 +474,10 @@ void Process::CoordinatorMode() {
         abort = true;
 
     if (abort) {
+
         LogAbort();
+        my_state_ = ABORTED;
+        
         // send ABORT message to all participants which voted YES
         for (const auto& ps : participant_state_map_) {
             if (ps.second == UNCERTAIN) {
@@ -490,9 +493,17 @@ void Process::CoordinatorMode() {
         LogPreCommit();
         SendPreCommitToAll();
         WaitForAck();
+        
         LogCommit();
+        my_state_ = COMMITTED;
+        
         SendCommitToAll();
     }
+
+    if(my_state_==ABORTED)
+        prev_decisions_.push_back(ABORT);
+    else
+        prev_decisions_.push_back(COMMIT);
 }
 
 void* NewCoordinatorMode(void * _p) {    
@@ -524,9 +535,11 @@ void* NewCoordinatorMode(void * _p) {
         if (my_state_ != ABORTED)
         {
             p->LogAbort();
+            my_state_ = ABORTED;
+
                    //only log if other process is abort. 
                 //if i know aborted, means already in log abort
-            my_state_ = ABORTED;
+            
         }
 
         for (const auto& ps : p->participant_state_map_) {
@@ -544,6 +557,8 @@ void* NewCoordinatorMode(void * _p) {
         {
             p->LogCommit();
             my_state_ = COMMITTED;
+            
+
         }
         p->SendCommitToAll();
         return NULL;
@@ -577,5 +592,11 @@ void* NewCoordinatorMode(void * _p) {
     p->WaitForAck();
     p->LogCommit();
     p->SendCommitToAll();
+
+    if(my_state_==ABORTED)
+        prev_decisions_.push_back(ABORT);
+    else
+        prev_decisions_.push_back(COMMIT);
+
     return NULL;
 }

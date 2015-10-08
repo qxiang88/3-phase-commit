@@ -316,7 +316,7 @@ void Process::CreateSDRThread(pthread_t &rec_sr_dr_thread) {
 
 void Process::AddToLog(string s, bool new_round)
 {
-    pthread_mutex_lock(&fd_lock);
+    pthread_mutex_lock(&log_lock);
 
     if (new_round)
     {
@@ -339,12 +339,12 @@ void Process::AddToLog(string s, bool new_round)
     else
         cout << "couldn't open" << log_file_ << endl;
 
-    pthread_mutex_unlock(&fd_lock);
+    pthread_mutex_unlock(&log_lock);
     outfile.close();
     return;
 }
 
-void Process::LoadLog()
+void Process::LoadLogAndPrevDecisions()
 {
     string line;
     vector<string> trans_log;
@@ -367,6 +367,12 @@ void Process::LoadLog()
             {
                 log_[round_id].push_back(line);
             }
+
+            if(line=="commit")
+                prev_decisions_.push_back(COMMIT);
+            else if(line=="abort")
+                prev_decisions_.push_back(ABORT);
+
         }
         myfile.close();
     }
@@ -393,6 +399,27 @@ bool Process::CheckCoordinator()
     else
         return false;
 }
+
+
+void Process::LoadUp()
+{
+    vector<string> cur_trans_log = log_[transaction_id_];
+    vector<string> temp;
+    up_.clear();
+    for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
+    {
+        temp = split(*it, ' ');
+        if (temp[0]=="up:")
+        {   
+            temp = split(temp[1], ',');
+            for(auto it = temp.begin(); it!=temp.end(); it++)
+                up_.insert(atoi((*it).c_str()));
+            return;
+        }
+    }
+}
+
+
 
 string Process::GetDecision()
 {
@@ -476,10 +503,10 @@ int Process::GetCoordinator()
 //sets my_state_ accd to log and calls termination protocol
 void Process::Recovery()
 {
-    LoadLog();
+    LoadLogAndPrevDecisions();
     LoadTransactionId();
     LoadParticipants();
-
+    
     string decision = GetDecision();
 
     //probably need to send the decision to others
@@ -518,8 +545,129 @@ void Process::Timeout()
 
 void Process::DecisionRequest()
 {
+    string msg;
+    string msg_to_send = kDecReq;
+    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     //if total failure, then init termination protocol with total failure. give arg to TP
+    while(!(my_state_==ABORTED || my_state_==COMMITTED))
+    {
+        SendDecReqToAll(msg);
+        WaitForDecisionResponse();
+        if(my_state_ == ABORTED)
+            LogAbort();
+        else if(my_state_ == COMMITTED)
+            LogCommit();
+        //sleep for some time
+        usleep(kDecReqTimeout);
+    }
 }
+
+void Process::WaitForDecisionResponse() {
+    int n = participant_state_map_.size();
+    std::vector<pthread_t> receive_thread(n);
+
+    ReceiveDecThreadArgument **rcv_thread_arg = new ReceiveDecThreadArgument*[n];
+    int i = 0;
+    for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
+        rcv_thread_arg[i] = new ReceiveThreadArgument;
+        rcv_thread_arg[i]->p = this;
+        rcv_thread_arg[i]->pid = it->first;
+        rcv_thread_arg[i]->transaction_id = transaction_id_;
+        // rcv_thread_arg[i]->decision;
+
+        if (pthread_create(&receive_thread[i], NULL, ReceiveDecision, (void *)rcv_thread_arg[i])) {
+            cout << "P" << get_pid() << ": ERROR: Unable to create receive dec thread for P" << get_pid() << endl;
+            pthread_exit(NULL);
+        }
+        i++;
+    }
+    
+    void* status;
+    
+    i = 0;
+    for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
+        pthread_join(receive_thread[i], &status);
+        if ((rcv_thread_arg[i]->decision) == COMMIT) 
+        {
+            my_state_ = COMMITTED;
+            return;
+        }
+        else if((rcv_thread_arg[i]->decision) == ABORT)
+        {
+            my_state_ = ABORTED;
+            return;
+        }
+        i++;
+    }
+}
+
+void* ReceiveDecision(void* _rcv_thread_arg)
+{
+    ReceiveDecThreadArgument *rcv_thread_arg = (ReceiveDecThreadArgument *)_rcv_thread_arg;
+    int pid = rcv_thread_arg->pid;
+    int tid = rcv_thread_arg->transaction_id;
+    Process *p = rcv_thread_arg->p;
+
+    char buf[kMaxDataSize];
+    int num_bytes;
+    //TODO: write code to extract multiple messages
+
+    fd_set temp_set;
+    FD_ZERO(&temp_set);
+    FD_SET(p->get_sdr_fd(pid), &temp_set);
+    int fd_max = p->get_fd(pid);
+    int rv;
+    rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
+    if (rv == -1) { //error in select
+        cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << endl;
+        rcv_thread_arg->received_msg_type = ERROR;
+    } else if (rv == 0) {   //timeout
+        rcv_thread_arg->received_msg_type = TIMEOUT;
+    } else {    // activity happened on the socket
+        if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
+            cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
+            rcv_thread_arg->received_msg_type = ERROR;
+        } else if (num_bytes == 0) {     //connection closed
+            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;        
+            // if participant closes connection, it is equivalent to it crashing
+            // can treat it as TIMEOUT
+            // TODO: verify argument
+            rcv_thread_arg->received_msg_type = TIMEOUT;
+            //TODO: handle connection close based on different cases
+        } else {
+            buf[num_bytes] = '\0';
+            cout << "P" << p->get_pid() << ": DecMsg received from P" << pid << ": " << buf <<  endl;
+
+            string extracted_msg;
+            int received_tid;
+            // in this case, we don't care about the received_tid,
+            // because it will surely be for the transaction under consideration
+            p->ExtractMsg(string(buf), extracted_msg, received_tid);
+
+            Decision msg = static_cast<Decision>(atoi(extracted_msg.c_str()));
+            rcv_thread_arg->decision = msg;
+            //assumes that correct message type is sent by participant
+        }
+    }
+    cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
+    return NULL;
+}
+
+
+void Process::SendDecReqToAll(const string &msg) {
+
+    //this only contains operational processes for non timeout cases
+    for ( auto it = participants_.begin(); it != participants_.end(); ++it ) {
+        // if ((it->first) == get_pid()) continue; // do not send to self
+        if (send(get_sdr_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
+            cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
+        }
+        else {
+            cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
+        }
+    }
+}
+
 
 void Process::TerminationProtocol()
 {   //called when a process times out.
@@ -647,10 +795,58 @@ void Process::LogStart()
     AddToLog(s, true);
 }
 
+void Process::LogUp()
+{
+    string s = "up:";
+    s+=" ";
+    //TODO:mutex lock up
+    unordered_set<int> copy_up_ = up_;
+
+    for ( auto it = copy_up_.begin(); it != copy_up_.end(); ++it )
+    {   
+        if(it!=copy_up_.begin())
+            s+=",";
+        s+=to_string(*it);
+    }
+    AddToLog(s);
+}
+
 void Process::SendState(int recp)
 {
     string msg;
     string msg_to_send = to_string((int)my_state_);
+    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
+        cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+    }
+    else {
+        cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
+    }
+}
+
+void Process::SendDecision(int recp)
+{
+    string msg;
+    int code_to_send;
+    if (my_state_==COMMITTED)
+        code_to_send = COMMIT;
+    else if(my_state_==ABORTED)
+        code_to_send = ABORT;
+    string msg_to_send = to_string(code_to_send);
+    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
+        cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+    }
+    else {
+        cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
+    }
+}
+
+void Process::SendPrevDecision(int recp, int tid)
+{
+    string msg;
+    int code_to_send = prev_decisions_[tid];
+    string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;

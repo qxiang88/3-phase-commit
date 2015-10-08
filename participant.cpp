@@ -357,7 +357,11 @@ void Process::ParticipantMode() {
     //if this participant is new coord, then it will have waited there to get a decision
     //else, we have to log abort or commit in SR thread receiving part
     }  
-    prev_decision_ = my_state_;  
+    
+    if(my_state_==ABORTED)
+        prev_decisions_.push_back(ABORT);
+    else
+        prev_decisions_.push_back(COMMIT);  
 }
 
 
@@ -367,11 +371,3 @@ void Process::ParticipantMode() {
     //     if another SR comes to thread 1, then 
     //         if 2 is still waiting for something, kill thread 2 
     //         if thread 2 has made a dec and exits, then return state to SR request
-    
-
-
-//start this thread initially in participant mode
-void* ReceiveStateOrDecisionRequest(void* _p) {
-        Process *p = (Process *)_p;
-
-}
