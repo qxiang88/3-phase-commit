@@ -105,7 +105,7 @@ bool Process::ConnectToProcessSDR(int process_id) {
     // cout << "P" << get_pid() << ": Client: connecting to " << outgoing_port << endl ;
     freeaddrinfo(servinfo); // all done with this structure
     set_sdr_fd(process_id, sockfd);
-    cout << "P" << get_pid() << ": Initiating SDR connection to P" << process_id << endl;
+    // cout << "P" << get_pid() << ": Initiating SDR connection to P" << process_id << endl;
     return true;
 }
 
@@ -147,7 +147,7 @@ void* ReceiveStateOrDecReq(void *_p) {
 	    // } 
 	    else 
 	    {
-            cout<<"something on SDR"<<endl;
+            // cout<<"something on SDR"<<endl;
 	        for (auto it = p->participants_.begin(); it != p->participants_.end(); ++it) 
 	        {
                 if(*it == p->get_pid()) continue;
@@ -191,8 +191,12 @@ void* ReceiveStateOrDecReq(void *_p) {
 	                        }
 	                        else //i am participant
 	                        {
+                                
+
 	                        	if((*it)<=(p->get_my_coordinator()))
 	                        	{   //only send to valid coord
+                                    p->set_state_req_in_progress(true);
+
 	                        		if((*it)<(p->get_my_coordinator()))
 	                        			p->set_my_coordinator(*it);
 
@@ -201,6 +205,9 @@ void* ReceiveStateOrDecReq(void *_p) {
                                     p->CreateThread(sr_response_thread, responder, (void *)p);
 
 	                        	}
+                                else
+                                    cout<<"my coord: "<<p->get_my_coordinator()<<" is less than this guy"<<endl;
+                                
 	                        }
 	                    	//case1 can coord get State req.ya because later no longer coord
 	                    }
@@ -235,6 +242,7 @@ void* responder(void *_p) {
 
     Process *p = (Process *)_p;
     p->SendState(p->get_my_coordinator());
+    cout<<"sent state to new coord at "<<time(NULL)%100<<endl;
     ProcessState my_st = p->get_my_state();
     if(!(my_st==UNCERTAIN || my_st==COMMITTABLE))
         return NULL;
@@ -242,15 +250,22 @@ void* responder(void *_p) {
     if(my_st == UNCERTAIN)
     {
         p->ReceivePreCommitOrAbortFromCoordinator();
+
         if(p->get_my_state()==UNCERTAIN)
             p->Timeout();
         else if(p->get_my_state()==ABORTED)
             p->LogAbort();
         else{
             p->LogPreCommit();
+            p->SendMsgToCoordinator(kAck);
+            cout<<p->get_pid()<<" sent ack to coord at "<<time(NULL)%100<<endl;
         }
     }
     else{
+        p->ReceivePreCommitOrAbortFromCoordinator();
+        p->SendMsgToCoordinator(kAck);
+        cout<<p->get_pid()<<" sent ack to coord at "<<time(NULL)%100<<endl;
+
         p->ReceiveCommitFromCoordinator();
         if(p->get_my_state()==COMMITTABLE)
             p->Timeout();

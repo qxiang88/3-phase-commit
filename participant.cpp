@@ -219,7 +219,7 @@ void Process::ReceiveCommitFromCoordinator() {
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << get_pid() << ": Msg received from P" << pid << ": " << buf <<  endl;
+            cout << "P" << get_pid() << ": Msg received from P" << pid << ": " << buf <<  "at "<<time(NULL)%100<<endl;
 
             string extracted_msg;
             int received_tid;
@@ -314,6 +314,7 @@ void Process::ParticipantMode() {
         { // coord sent PRE-COMMIT
             LogPreCommit();
             SendMsgToCoordinator(kAck);
+            cout<<pid_<<" sent ack to coord at "<<time(NULL)%100<<endl;
             ReceiveCommitFromCoordinator();
             //this detects timeout, exits and state will be the same as intial
             if (my_state_ == COMMITTED) 

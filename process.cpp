@@ -693,33 +693,52 @@ void Process::SendDecReqToAll(const string &msg) {
 void Process::TerminationProtocol()
 {   //called when a process times out.
 
+    //reset statereq variable
+    // state_req_in_progress = true;
     //sets new coord
-    cout << "TerminationProtocol" << endl;
+    cout << "TerminationProtocol by" << get_pid()<< " at "<<time(NULL)%100<<endl;
     bool status = false;
-    while(!status){
+    // while(!status){
         ElectionProtocol();
 
 
-        if(my_coordinator_==1)
-            cout << "P" << pid_ << ": my new coordinator=one"<< endl;
-        else if(my_coordinator_==2)
-            cout << "P" << pid_ << ": my new coordinator=two"<< endl;
+        // if(my_coordinator_==1)
+        //     cout << "P" << pid_ << ": my new coordinator=one"<< endl;
+        // else if(my_coordinator_==2)
+        //     cout << "P" << pid_ << ": my new coordinator=two"<< endl;
 
         if (pid_ == my_coordinator_)
         {   //coord case
             //pass on arg saying total failue, then send to all
+            void* status;
             CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
+            pthread_join(newcoord_thread, &status);
+            RemoveThreadFromSet(newcoord_thread);
         }
         else
         {
+            state_req_in_progress = false;
             status = SendURElected(my_coordinator_);
+            usleep(kGeneralTimeout);
+            if(state_req_in_progress)
+                return;
+            TerminationProtocol();
+
+            // WaitForStateRequest();
+            //wait for 3 sec
+            //check if state req has been received using shared memory
+
+
             //then do nothing here, the initial SR thread will see that a SR message is here
             //so that replies state and does all that shit
             //till we get a decision
             // TerminationParticipantMode();
         }
-        break;
-    }
+    // }
+}
+void Process::set_state_req_in_progress(bool val)
+{
+    state_req_in_progress = val;
 }
 
 void Process::ElectionProtocol()

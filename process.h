@@ -132,6 +132,7 @@ public:
     ProcessState get_my_state();
     int get_my_coordinator();
     int get_transaction_id();
+    void set_state_req_in_progress(bool );
 
     // list of processes operational for a transaction (and hence, an iteration of 3PC)
     // operational for an iteration is defined as a process which
@@ -153,6 +154,7 @@ private:
     string log_file_;
     string playlist_file_;
     std::unordered_map<string, string> playlist_;
+    bool state_req_in_progress;
 
     // socket fd for each process corresponding to send connection
     std::vector<int> fd_;

@@ -170,9 +170,9 @@ void Process::WaitForStates() {
     void* status;
     i = 0;
     for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
-        cout<<"about to join "<<it->first<<endl;
+        // cout<<"about to join "<<it->first<<endl;
         pthread_join(receive_thread[i], &status);
-        cout<<"joined "<<it->first<<endl;
+        // cout<<"joined "<<it->first<<endl;
         RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->st) == UNINITIALIZED) {
             //TODO: not necessarily. handle
@@ -184,7 +184,7 @@ void Process::WaitForStates() {
 
         }
         i++;
-        cout<<"enum val"<<it->second<<endl;
+        cout<<"Set received state as "<<it->second<<"at "<<(time(NULL)%100)<<endl;
     }
 }
 
@@ -475,6 +475,7 @@ void Process::CoordinatorMode() {
     Vote(trans); //coordinator's self vote
     // iterate through the states of all processes
     bool abort = false;
+
     for (const auto& ps : participant_state_map_) {
         if (ps.second == PROCESSTIMEOUT || ps.second == ABORTED) {
             abort = true;
@@ -499,15 +500,13 @@ void Process::CoordinatorMode() {
         }
     } else {
 
-        return;
-
         LogPreCommit();
         SendPreCommitToAll();
         WaitForAck();
         
         LogCommit();
         my_state_ = COMMITTED;
-        
+
         SendCommitToAll();
     }
 
@@ -590,7 +589,7 @@ void* NewCoordinatorMode(void * _p) {
     }
     if (uncert && my_state_ == UNCERTAIN)
     {
-        outf << "sending abort"<< endl;
+        outf << "sending abort"<<  "at "<<time(NULL)%100<<endl;
         p->LogAbort();
         for (const auto& ps : p->participant_state_map_) {
             p->SendAbortToProcess(ps.first);
@@ -602,13 +601,16 @@ void* NewCoordinatorMode(void * _p) {
     //some are commitable
     p->LogPreCommit();
     for (const auto& ps : p->participant_state_map_) {
-        if (ps.second == UNCERTAIN)
-            p->SendPreCommitToProcess(ps.first);
+        // if (ps.second == UNCERTAIN)
+        //     {
+                p->SendPreCommitToProcess(ps.first);
+                outf<<"sending pc to uncertain"<< "at "<<time(NULL)%100<<endl;
+            // }
     }
     p->WaitForAck();
     p->LogCommit();
     p->SendCommitToAll();
-
+    outf<<"sent commit "<< "at "<<time(NULL)%100<<endl;
     if(my_state_==ABORTED)
         p->prev_decisions_.push_back(ABORT);
     else
