@@ -161,7 +161,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
 
                         pthread_cancel(sr_response_thread);
                         p->RemoveThreadFromSet(sr_response_thread);    //TODO: SC added this
-                        
+
                         p->CreateThread(sr_response_thread, responder, (void *)p);
                         //whyat shud be my mode now
                     }
@@ -334,7 +334,7 @@ void* responder(void *_p) {
 
     Process *p = (Process *)_p;
     p->SendState(p->get_my_coordinator());
-    cout<<"sent state to new coord at "<<time(NULL)%100<<endl;
+    cout << "sent state to new coord at " << time(NULL) % 100 << endl;
     ProcessState my_st = p->get_my_state();
     if (!(my_st == UNCERTAIN || my_st == COMMITTABLE))
         return NULL;
@@ -342,20 +342,21 @@ void* responder(void *_p) {
     if (my_st == UNCERTAIN)
     {
         p->ReceivePreCommitOrAbortFromCoordinator();
-        if(p->get_my_state()==UNCERTAIN)
+        if (p->get_my_state() == UNCERTAIN)
             p->Timeout();
         else if (p->get_my_state() == ABORTED)
             p->LogAbort();
         else {
             p->LogPreCommit();
             p->SendMsgToCoordinator(kAck);
-            cout<<p->get_pid()<<" sent ack to coord at "<<time(NULL)%100<<endl;
+            cout << p->get_pid() << " sent ack to coord at " << time(NULL) % 100 << endl;
         }
     }
-    else{
+    else {
         p->ReceivePreCommitOrAbortFromCoordinator();
+        p->LogPreCommit();
         p->SendMsgToCoordinator(kAck);
-        cout<<p->get_pid()<<" sent ack to coord at "<<time(NULL)%100<<endl;
+        cout << p->get_pid() << " sent ack to coord at " << time(NULL) % 100 << endl;
 
         p->ReceiveCommitFromCoordinator();
         if (p->get_my_state() == COMMITTABLE)

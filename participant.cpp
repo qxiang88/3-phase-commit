@@ -382,7 +382,6 @@ void Process::ParticipantMode() {
         //else, we have to log abort or commit in SR thread receiving part
         usleep(kGeneralSleep);
     }
-
     if (my_state_ == ABORTED)
         prev_decisions_.push_back(ABORT);
     else

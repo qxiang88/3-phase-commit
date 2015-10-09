@@ -18,36 +18,40 @@ using namespace std;
 
 pthread_mutex_t up_lock;
 
-void Process::UpdateUpSet(std::unordered_set<int> &alive_processes) {
-    bool change = false;
-    pthread_mutex_lock(&up_lock);
+// void Process::UpdateUpSet(std::unordered_set<int> &alive_processes) {
+//     bool change = false;
+//     pthread_mutex_lock(&up_lock);
 
-    auto it = up_.begin();
-    while (it != up_.end()) {
-        if (alive_processes.find(*it) == alive_processes.end()) { // process is no longer alive
-            change = true;
-            cout << "P" << get_pid() << ": Removing P" << *it << " from UP set" << endl;
-            it = up_.erase(it);
-        } else {
-            it++;
-        }
-    }
-    pthread_mutex_unlock(&up_lock);
+//     auto it = up_.begin();
+//     while (it != up_.end()) {
+//         if (alive_processes.find(*it) == alive_processes.end()) { // process is no longer alive
+//             change = true;
+//             cout << "P" << get_pid() << ": Removing P" << *it << " from UP set" << endl;
+//             it = up_.erase(it);
+//         } else {
+//             it++;
+//         }
+//     }
+//     pthread_mutex_unlock(&up_lock);
 
-    if (change) {
-        LogUp();
-    }
-}
+//     if (change) {
+//         LogUp();
+//     }
+// }
 
 void Process::RemoveFromUpSet(int k) {
+    bool log = false;
     pthread_mutex_lock(&up_lock);
-    if(up_.find(k)!=up_.end())
+    if(up_.find(k)!=up_.end()) {
         up_.erase(k);
+        log = true;
+    }
     pthread_mutex_unlock(&up_lock);
     if(k==my_coordinator_){
         my_coordinator_ = INT_MAX;
     }
-    LogUp();
+    if(log)
+        LogUp();
 }
 
 
@@ -132,7 +136,7 @@ bool Process::ConnectToProcessAlive(int process_id) {
     {
         if (connect(sockfd, l->ai_addr, l->ai_addrlen) == -1) {
             close(sockfd);
-            cout << "P" << get_pid() << ": Client: connect ERROR\n";
+            cout << "P" << get_pid() << ": AClient: connect ERROR\n";
             continue;
         }
 
