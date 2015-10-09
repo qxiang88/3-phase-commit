@@ -77,12 +77,12 @@ bool Controller::ReadConfigFile() {
     int count;
     ifstream temp;
     temp.open("configs/count");
-    temp>>count;
+    temp >> count;
     temp.close();
 
     ofstream tempw;
     tempw.open("configs/count");
-    tempw<<(count+1)%5;
+    tempw << (count + 1) % 5;
     tempw.close();
 
 
@@ -92,7 +92,7 @@ bool Controller::ReadConfigFile() {
     ifstream fin;
     fin.exceptions ( ifstream::failbit | ifstream::badbit );
     try {
-        fin.open((kConfigFile+to_string(count)).c_str());
+        fin.open((kConfigFile + to_string(count)).c_str());
         fin >> N;
         int port;
         for (int i = 0; i < N; ++i) {
@@ -130,7 +130,10 @@ bool Controller::CreateProcesses() {
     // creating N Process objects
     process_.resize(N);
     for (int i = 0; i < N; i++) {
-        process_[i].Initialize(i, kLogFile + to_string(i), kPlaylistFile + to_string(i));
+        process_[i].Initialize(i,
+                               kLogFile + to_string(i),
+                               kPlaylistFile + to_string(i),
+                               RUNNING);
         if (pthread_create(&process_thread_[i], NULL, ThreadEntry, (void *)&process_[i])) {
             cout << "C: ERROR: Unable to create thread for P" << i << endl;
             return false;
@@ -163,13 +166,16 @@ string Controller::get_transaction(int transaction_id) {
     else return "NULL";
 }
 
+// closes all FDs opened by the process
+// sets process' my_status_ to FAILED
 // cancels all threads created by the process
 // then, cancels the thread_entry thread for that process
 void Controller::KillProcess(int process_id) {
     process_[process_id].CloseFDs();
     process_[process_id].CloseSDRFDs();
     process_[process_id].CloseAliveFDs();
-    for(const auto &th: process_[process_id].thread_set) {
+    process_[process_id].set_my_status(FAILED);
+    for (const auto &th : process_[process_id].thread_set) {
         pthread_cancel(th);
     }
     pthread_cancel(process_thread_[process_id]);
@@ -198,6 +204,11 @@ int main() {
     // c.KillProcess(2);
     c.WaitForThreadJoins();
 
+    // int t=0
+    // while(c.get_transaction(t) != "NULL") {
+    //     //TODO: PrepareProcessForNextTransaction()
+    //     // do we move to next transaction only when all previous
+    // }
 
     return 0;
 }

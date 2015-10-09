@@ -41,9 +41,27 @@ typedef enum
     ABORT, COMMIT
 } Decision;
 
+// status of each process. Used by controller to move to next transaction
+typedef enum
+{
+    // process is still involved in a transaction related message-passing (but never failed)
+    RUNNING,
+
+    // process has completed 3PC for the curr transaction. Coordinator mode/Participant Mode over
+    DONE,
+    
+    // process has crashed during the curr transaction
+    FAILED,
+    
+    // process is in recovery mode. This means it failed in the past. When it reaches a decision,
+    // its state should change to DONE
+    RECOVERY
+} ProcessRunningStatus;
+
 class Process : public Controller {
 public:
-    void Initialize(int pid, string log_file, string playlist_file);
+    void Initialize(int pid, string log_file, string playlist_file,
+                    ProcessRunningStatus status);
     bool LoadPlaylist();
     bool ConnectToProcess(int process_id);
     bool ConnectToProcessAlive(int process_id);
@@ -135,6 +153,8 @@ public:
     int get_transaction_id();
     void set_state_req_in_progress(bool );
     void set_my_state(ProcessState state);
+    ProcessRunningStatus get_my_status();
+    void set_my_status(ProcessRunningStatus status);
 
 
     // list of processes operational for a transaction (and hence, an iteration of 3PC)
@@ -175,7 +195,8 @@ private:
     // to be used only by coordinator
     map<int, vector<string> > log_;
 
-
+    // Process' own running status
+    ProcessRunningStatus my_status_;
     // bool am_coordinator_;
 
     // the coordinator which this process perceives

@@ -40,14 +40,26 @@ void* ThreadEntry(void* _p) {
     // sleep to make sure server is up and listening
     // usleep(kGeneralSleep);
 
-    // if pid=0, then it is the coordinator
-    //TODO: find a better way to set coordinator
-    if (p->get_pid() == 0) {
-        p->CoordinatorMode();
-        cout << "P" << p->get_pid() << ": Coordinator mode over" << endl;
+    // if my_status_ is RUNNING, process enters normal modes
+    if (p->get_my_status() == RUNNING) {
+        // if pid=0, then it is the coordinator
+        //TODO: find a better way to set coordinator
+        if (p->get_pid() == 0) {
+            p->CoordinatorMode();
+            cout << "P" << p->get_pid() << ": Coordinator mode over" << endl;
+            p->set_my_status(DONE);
+        } else {
+            p->ParticipantMode();
+            cout << "P" << p->get_pid() << ": Participant mode over" << endl;
+            p->set_my_status(DONE);
+        }
+    } else if(p->get_my_status() == RECOVERY) {
+        // TODO: Recovery mode for process
+
+        // TODO: set_my_status after recovery is complete
     } else {
-        p->ParticipantMode();
-        cout << "P" << p->get_pid() << ": Participant mode over" << endl;
+            cout << "P" << p->get_pid() << ": Unexpected Status" << endl;
+            //TODO: verify if process can enter ThreadEntry with any other runningstatus
     }
 
     void* status;
@@ -56,7 +68,8 @@ void* ThreadEntry(void* _p) {
 }
 
 
-void Process::Initialize(int pid, string log_file, string playlist_file) {
+void Process::Initialize(int pid, string log_file, string playlist_file,
+                         ProcessRunningStatus status) {
     pid_ = pid;
     log_file_ = log_file;
     playlist_file_ = playlist_file;
@@ -67,6 +80,7 @@ void Process::Initialize(int pid, string log_file, string playlist_file) {
     my_state_ = UNINITIALIZED;
     transaction_id_ = 0;
     thread_set.clear();
+    my_status_ = status;
 }
 
 int Process::get_pid() {
@@ -123,7 +137,7 @@ void Process::set_my_coordinator(int process_id) {
 
 // get socket fd corresponding to process_id's send connection
 int Process::get_fd(int process_id) {
-    if(process_id == INT_MAX) return -1;
+    if (process_id == INT_MAX) return -1;
     int ret;
     pthread_mutex_lock(&fd_lock);
     ret = fd_[process_id];
@@ -133,7 +147,7 @@ int Process::get_fd(int process_id) {
 
 // get socket fd corresponding to process_id's alive connection
 int Process::get_alive_fd(int process_id) {
-    if(process_id == INT_MAX) return -1;
+    if (process_id == INT_MAX) return -1;
     int ret;
     pthread_mutex_lock(&alive_fd_lock);
     ret = alive_fd_[process_id];
@@ -142,7 +156,7 @@ int Process::get_alive_fd(int process_id) {
 }
 
 int Process::get_sdr_fd(int process_id) {
-    if(process_id == INT_MAX) return -1;
+    if (process_id == INT_MAX) return -1;
     int ret;
     pthread_mutex_lock(&sdr_fd_lock);
     ret = sdr_fd_[process_id];
@@ -150,6 +164,13 @@ int Process::get_sdr_fd(int process_id) {
     return ret;
 }
 
+ProcessRunningStatus Process::get_my_status() {
+    return my_status_;
+}
+
+void Process::set_my_status(ProcessRunningStatus status) {
+    my_status_ = status;
+}
 
 ProcessState Process::get_my_state()
 {
@@ -326,7 +347,7 @@ void Process::CreateThread(pthread_t &thread, void* (*f)(void* ), void* arg) {
 void Process::CreateAliveThreads(vector<pthread_t> &receive_alive_threads, pthread_t &send_alive_thread) {
 
     int n = up_.size();
-    // 
+    //
 
     ReceiveAliveThreadArgument **rcv_thread_arg = new ReceiveAliveThreadArgument*[n];
     int i = 0;
@@ -402,9 +423,9 @@ void Process::LoadLogAndPrevDecisions()
                 log_[round_id].push_back(line);
             }
 
-            if(line=="commit")
+            if (line == "commit")
                 prev_decisions_.push_back(COMMIT);
-            else if(line=="abort")
+            else if (line == "abort")
                 prev_decisions_.push_back(ABORT);
 
         }
@@ -443,10 +464,10 @@ void Process::LoadUp()
     for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
     {
         temp = split(*it, ' ');
-        if (temp[0]=="up:")
-        {   
+        if (temp[0] == "up:")
+        {
             temp = split(temp[1], ',');
-            for(auto it = temp.begin(); it!=temp.end(); it++)
+            for (auto it = temp.begin(); it != temp.end(); it++)
                 up_.insert(atoi((*it).c_str()));
             return;
         }
@@ -540,7 +561,7 @@ void Process::Recovery()
     LoadLogAndPrevDecisions();
     LoadTransactionId();
     LoadParticipants();
-    
+
     string decision = GetDecision();
 
     //probably need to send the decision to others
@@ -583,13 +604,13 @@ void Process::DecisionRequest()
     string msg_to_send = kDecReq;
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     //if total failure, then init termination protocol with total failure. give arg to TP
-    while(!(my_state_==ABORTED || my_state_==COMMITTED))
+    while (!(my_state_ == ABORTED || my_state_ == COMMITTED))
     {
         SendDecReqToAll(msg);
         WaitForDecisionResponse();
-        if(my_state_ == ABORTED)
+        if (my_state_ == ABORTED)
             LogAbort();
-        else if(my_state_ == COMMITTED)
+        else if (my_state_ == COMMITTED)
             LogCommit();
         //sleep for some time
         usleep(kDecReqTimeout);
@@ -608,23 +629,23 @@ void Process::WaitForDecisionResponse() {
         rcv_thread_arg[i]->pid = it->first;
         rcv_thread_arg[i]->transaction_id = transaction_id_;
         // rcv_thread_arg[i]->decision;
-        
+
         CreateThread(receive_thread[i], ReceiveDecision, (void *)rcv_thread_arg[i]);
         i++;
     }
-    
+
     void* status;
-    
+
     i = 0;
     for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
         pthread_join(receive_thread[i], &status);
         RemoveThreadFromSet(receive_thread[i]);
-        if ((rcv_thread_arg[i]->decision) == COMMIT) 
+        if ((rcv_thread_arg[i]->decision) == COMMIT)
         {
             my_state_ = COMMITTED;
             return;
         }
-        else if((rcv_thread_arg[i]->decision) == ABORT)
+        else if ((rcv_thread_arg[i]->decision) == ABORT)
         {
             my_state_ = ABORTED;
             return;
@@ -660,7 +681,7 @@ void* ReceiveDecision(void* _rcv_thread_arg)
             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
             rcv_thread_arg->received_msg_type = ERROR;
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;        
+            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
             // if participant closes connection, it is equivalent to it crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
@@ -708,44 +729,44 @@ void Process::TerminationProtocol()
     //reset statereq variable
     // state_req_in_progress = true;
     //sets new coord
-    cout << "TerminationProtocol by" << get_pid()<< " at "<<time(NULL)%100<<endl;
+    cout << "TerminationProtocol by" << get_pid() << " at " << time(NULL) % 100 << endl;
     bool status = false;
     // while(!status){
-        ElectionProtocol();
+    ElectionProtocol();
 
 
-        // if(my_coordinator_==1)
-        //     cout << "P" << pid_ << ": my new coordinator=one"<< endl;
-        // else if(my_coordinator_==2)
-        //     cout << "P" << pid_ << ": my new coordinator=two"<< endl;
+    // if(my_coordinator_==1)
+    //     cout << "P" << pid_ << ": my new coordinator=one"<< endl;
+    // else if(my_coordinator_==2)
+    //     cout << "P" << pid_ << ": my new coordinator=two"<< endl;
 
-        if (pid_ == my_coordinator_)
-        {   //coord case
-            //pass on arg saying total failue, then send to all
-            void* status;
-            CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
-            pthread_join(newcoord_thread, &status);
-            RemoveThreadFromSet(newcoord_thread);
-        }
-        else
-        {
-            state_req_in_progress = false;
-            status = SendURElected(my_coordinator_);
-            usleep(kGeneralTimeout);
-            if(state_req_in_progress)
-                return;
-            TerminationProtocol();
+    if (pid_ == my_coordinator_)
+    {   //coord case
+        //pass on arg saying total failue, then send to all
+        void* status;
+        CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
+        pthread_join(newcoord_thread, &status);
+        RemoveThreadFromSet(newcoord_thread);
+    }
+    else
+    {
+        state_req_in_progress = false;
+        status = SendURElected(my_coordinator_);
+        usleep(kGeneralTimeout);
+        if (state_req_in_progress)
+            return;
+        TerminationProtocol();
 
-            // WaitForStateRequest();
-            //wait for 3 sec
-            //check if state req has been received using shared memory
+        // WaitForStateRequest();
+        //wait for 3 sec
+        //check if state req has been received using shared memory
 
 
-            //then do nothing here, the initial SR thread will see that a SR message is here
-            //so that replies state and does all that shit
-            //till we get a decision
-            // TerminationParticipantMode();
-        }
+        //then do nothing here, the initial SR thread will see that a SR message is here
+        //so that replies state and does all that shit
+        //till we get a decision
+        // TerminationParticipantMode();
+    }
     // }
 }
 void Process::set_state_req_in_progress(bool val)
@@ -797,8 +818,8 @@ int Process::GetNewCoordinator()
                 min = *it;
         }
     }
-    
-    if(min>get_pid())
+
+    if (min > get_pid())
         min = get_pid();
     // ofile<<"min: "<<min<<endl;
     return min;
@@ -867,17 +888,17 @@ void Process::LogStart()
 void Process::LogUp()
 {
     string s = "up:";
-    s+=" ";
+    s += " ";
     //TODO:mutex lock up
     pthread_mutex_lock(&up_lock);
     unordered_set<int> copy_up_ = up_;
     pthread_mutex_unlock(&up_lock);
 
     for ( auto it = copy_up_.begin(); it != copy_up_.end(); ++it )
-    {   
-        if(it!=copy_up_.begin())
-            s+=",";
-        s+=to_string(*it);
+    {
+        if (it != copy_up_.begin())
+            s += ",";
+        s += to_string(*it);
     }
     AddToLog(s);
 }
@@ -888,7 +909,7 @@ void Process::SendState(int recp)
     string msg_to_send = to_string((int)my_state_);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
 
-    if(recp==INT_MAX)
+    if (recp == INT_MAX)
         return;
 
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
@@ -904,15 +925,15 @@ void Process::SendDecision(int recp)
 {
     string msg;
     int code_to_send;
-    if (my_state_==COMMITTED)
+    if (my_state_ == COMMITTED)
         code_to_send = COMMIT;
-    else if(my_state_==ABORTED)
+    else if (my_state_ == ABORTED)
         code_to_send = ABORT;
     string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
-        RemoveFromUpSet(recp);   
+        RemoveFromUpSet(recp);
     }
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
@@ -941,27 +962,27 @@ int Process::get_transaction_id()
 
 void Process::CloseFDs()
 {
-    for(auto it = fd_.begin(); it!=fd_.end(); it++)
+    for (auto it = fd_.begin(); it != fd_.end(); it++)
     {
-        if((*it)!=-1)
+        if ((*it) != -1)
             close(*it);
     }
 }
 void Process::CloseAliveFDs()
 {
 
-    for(auto it = alive_fd_.begin(); it!=alive_fd_.end(); it++)
+    for (auto it = alive_fd_.begin(); it != alive_fd_.end(); it++)
     {
-        if((*it)!=-1)
+        if ((*it) != -1)
             close(*it);
     }
 }
 void Process::CloseSDRFDs()
 {
 
-    for(auto it = sdr_fd_.begin(); it!=sdr_fd_.end(); it++)
+    for (auto it = sdr_fd_.begin(); it != sdr_fd_.end(); it++)
     {
-        if((*it)!=-1)
+        if ((*it) != -1)
             close(*it);
     }
 }
