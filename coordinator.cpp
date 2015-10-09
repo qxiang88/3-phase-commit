@@ -56,7 +56,6 @@ void Process::SendStateReqToAll(const string &msg) {
     //this only contains operational processes for non timeout cases
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
-
         if (send(get_sdr_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -95,7 +94,7 @@ void Process::WaitForVotes() {
         RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->received_msg_type) == ERROR) {
             //TODO: not necessarily. handle
-            pthread_exit(NULL);
+            // pthread_exit(NULL);
         } else if ((rcv_thread_arg[i]->received_msg_type) == YES) {
             // if a participant votes yes, mark its state as UNCERTAIN
             it->second = UNCERTAIN;
@@ -137,7 +136,7 @@ void Process::WaitForAck() {
         RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->received_msg_type) == ERROR) {
             //TODO: not necessarily. handle
-            pthread_exit(NULL);
+            // pthread_exit(NULL);
         } else if ((rcv_thread_arg[i]->received_msg_type) == ACK) {
             // if a participant ACKed, good for you
             // no need to do anything
@@ -175,14 +174,14 @@ void Process::WaitForStates() {
         if ((rcv_thread_arg[i]->st) == UNINITIALIZED) {
             //TODO: not necessarily. handle
             //error
-            pthread_exit(NULL);
+            // pthread_exit(NULL);
         }
         else {
             it->second = rcv_thread_arg[i]->st;
 
         }
         i++;
-        cout << "Set received state as " << it->second << "at " << (time(NULL) % 100) << endl;
+        // cout << "Set received state as " << it->second << "at " << (time(NULL) % 100) << endl;
     }
 }
 
@@ -507,7 +506,6 @@ void Process::CoordinatorMode() {
 
         LogPreCommit();
         SendPreCommitToAll();
-    // return;
         WaitForAck();
 
         LogCommit();
@@ -545,8 +543,16 @@ void* NewCoordinatorMode(void * _p) {
     p->SendStateReqToAll(msg);
     outf << "sent state req" << endl;
     p->WaitForStates();
-
     ProcessState my_st = p->get_my_state();
+    
+
+
+    // if(p->get_pid() == 1) return NULL;
+    // my_st = COMMITTED;
+    
+
+
+
     // iterate through the states of all processes
     // bool abort = false, committed = false, commit = false, ;
     //ProcessState key = ABORTED;
@@ -626,7 +632,7 @@ void* NewCoordinatorMode(void * _p) {
         // if (ps.second == UNCERTAIN)
         //     {
         p->SendPreCommitToProcess(ps.first);
-        outf << "sending pc to uncertain" << "at " << time(NULL) % 100 << endl;
+        outf << "sending pc " << "at " << time(NULL) % 100 << endl;
         // }
     }
     p->WaitForAck();

@@ -73,6 +73,7 @@ public:
     bool WaitForVoteReq(string &transaction_msg);
     void SendMsgToCoordinator(const string &msg_to_send);
     void ReceivePreCommitOrAbortFromCoordinator();
+    void ReceiveAnythingFromCoordinator();
     void ReceiveCommitFromCoordinator();
     void CreateAliveThreads(vector<pthread_t> &receive_alive_thread, pthread_t &send_alive_thread);
     void CreateSDRThread(int process_id, pthread_t &sdr_receive_thread);

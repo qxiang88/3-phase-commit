@@ -4,6 +4,7 @@
 #include "sstream"
 #include "iostream"
 #include "unistd.h"
+#include "limits.h"
 #include <errno.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -126,6 +127,8 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
 void Process::SendMsgToCoordinator(const string &msg_to_send) {
     string msg;
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    if(my_coordinator_==INT_MAX)
+        return;
     if (send(get_fd(my_coordinator_), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << my_coordinator_ << endl;
         RemoveFromUpSet(my_coordinator_);
@@ -183,6 +186,65 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
                 my_state_ = COMMITTABLE;
             } else if (extracted_msg == kAbort && received_tid == transaction_id_) {
                 my_state_ = ABORTED;
+            } else {
+                //TODO: take actions appropriately, like check log for previous transaction decision.
+                cout << "P" << get_pid() << ": Unexpected msg received from P" << pid << endl;
+            }
+        }
+    }
+    // cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
+}
+
+// waits for PRE-COMMIT or ABORT or COMMIT from coordinator
+// on receipt, updates my_state_ variable
+// on timeout, initiates termination protocol
+void Process::ReceiveAnythingFromCoordinator() {
+    int pid = my_coordinator_;
+    char buf[kMaxDataSize];
+    int num_bytes;
+    //TODO: write code to extract multiple messages
+
+    fd_set temp_set;
+    FD_ZERO(&temp_set);
+    FD_SET(get_fd(pid), &temp_set);
+    int fd_max = get_fd(pid);
+    int rv;
+    rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
+    if (rv == -1) { //error in select
+        cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
+        // pthread_exit(NULL);
+    } else if (rv == 0) {
+        //timeout
+        RemoveFromUpSet(pid);
+        //do i need to set somethign here
+    } else {    // activity happened on the socket
+        if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
+            cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
+            RemoveFromUpSet(pid);
+        } else if (num_bytes == 0) {     //connection closed
+            cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
+            // if coordinator closes connection, it is equivalent to coordinator crashing
+            // can treat it as TIMEOUT
+            RemoveFromUpSet(pid);
+            // TODO: verify argument
+            // execute actions same as above if(rv==0) case
+            //TODO: handle connection close based on different cases
+        } else {
+            buf[num_bytes] = '\0';
+            cout << "P" << get_pid() << ": Msg received from P" << pid << ": " << buf <<  endl;
+
+            string extracted_msg;
+            int received_tid;
+            // in this case, we don't care about the received_tid,
+            // because it will surely be for the transaction under consideration
+            ExtractMsg(string(buf), extracted_msg, received_tid);
+            if (extracted_msg == kPreCommit && received_tid == transaction_id_) {
+                // making sure msg is for the curr transaction and not a future one
+                my_state_ = COMMITTABLE;
+            } else if (extracted_msg == kAbort && received_tid == transaction_id_) {
+                my_state_ = ABORTED;
+            } else  if (extracted_msg == kCommit && received_tid == transaction_id_) {
+                my_state_ = COMMITTED;
             } else {
                 //TODO: take actions appropriately, like check log for previous transaction decision.
                 cout << "P" << get_pid() << ": Unexpected msg received from P" << pid << endl;
@@ -295,7 +357,8 @@ void Process::ParticipantMode() {
         // one sdr receive thread for each participant, not just those in up_
         // because any participant could ask for Dec Req in future.
         // size = participant_.size()-1 because it contains self
-        vector<pthread_t> sdr_receive_threads(participants_.size() - 1);
+        // size + 1 for coordinator
+        vector<pthread_t> sdr_receive_threads(participants_.size());
         int i = 0;
         for (auto it = participants_.begin(); it != participants_.end(); ++it) {
             //make sure you don't create a SDR receive thread for self
@@ -303,6 +366,9 @@ void Process::ParticipantMode() {
             CreateSDRThread(*it, sdr_receive_threads[i]);
             i++;
         }
+
+        CreateSDRThread(my_coordinator_, sdr_receive_threads[i]);
+
 
         // vector<pthread_t> sdr_receive_thread;
         // CreateSDRThread(sdr_receive_thread);
@@ -333,7 +399,7 @@ void Process::ParticipantMode() {
         {   // coord sent PRE-COMMIT
             LogPreCommit();
             SendMsgToCoordinator(kAck);
-            cout<<pid_<<" sent ack to coord at "<<time(NULL)%100<<endl;
+            // cout<<pid_<<" sent ack to coord at "<<time(NULL)%100<<endl;
             ReceiveCommitFromCoordinator();
             //this detects timeout, exits and state will be the same as intial
             if (my_state_ == COMMITTED)

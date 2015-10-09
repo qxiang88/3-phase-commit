@@ -1,5 +1,6 @@
 #include "process.h"
 #include "constants.h"
+#include "limits.h"
 #include "fstream"
 #include "sstream"
 #include "iostream"
@@ -122,6 +123,7 @@ void Process::set_my_coordinator(int process_id) {
 
 // get socket fd corresponding to process_id's send connection
 int Process::get_fd(int process_id) {
+    if(process_id == INT_MAX) return -1;
     int ret;
     pthread_mutex_lock(&fd_lock);
     ret = fd_[process_id];
@@ -131,6 +133,7 @@ int Process::get_fd(int process_id) {
 
 // get socket fd corresponding to process_id's alive connection
 int Process::get_alive_fd(int process_id) {
+    if(process_id == INT_MAX) return -1;
     int ret;
     pthread_mutex_lock(&alive_fd_lock);
     ret = alive_fd_[process_id];
@@ -139,6 +142,7 @@ int Process::get_alive_fd(int process_id) {
 }
 
 int Process::get_sdr_fd(int process_id) {
+    if(process_id == INT_MAX) return -1;
     int ret;
     pthread_mutex_lock(&sdr_fd_lock);
     ret = sdr_fd_[process_id];
@@ -883,6 +887,10 @@ void Process::SendState(int recp)
     string msg;
     string msg_to_send = to_string((int)my_state_);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+
+    if(recp==INT_MAX)
+        return;
+
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
         RemoveFromUpSet(recp);

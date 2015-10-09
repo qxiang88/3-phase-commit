@@ -203,7 +203,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
         // cout<<"left select "<<endl;
         if (rv == -1) {
             cout << "P" << p->get_pid() << ": ERROR in select() in Alive receive" << endl;
-            pthread_exit(NULL);
+            // pthread_exit(NULL);
         } 
         else 
         {

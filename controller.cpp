@@ -74,10 +74,25 @@ int Controller::get_sdr_port_pid_map(int port_num) {
 // constructs send_port_pid_map_
 // constructs alive_port_pid_map_
 bool Controller::ReadConfigFile() {
+    int count;
+    ifstream temp;
+    temp.open("configs/count");
+    temp>>count;
+    temp.close();
+
+    ofstream tempw;
+    tempw.open("configs/count");
+    tempw<<(count+1)%5;
+    tempw.close();
+
+
+
+
+
     ifstream fin;
     fin.exceptions ( ifstream::failbit | ifstream::badbit );
     try {
-        fin.open(kConfigFile.c_str());
+        fin.open((kConfigFile+to_string(count)).c_str());
         fin >> N;
         int port;
         for (int i = 0; i < N; ++i) {
@@ -175,8 +190,12 @@ int main() {
     if (!c.ReadConfigFile()) return 1;
     c.CreateTransactions();
     if (!c.CreateProcesses()) return 1;
-    sleep(4);
-    c.KillProcess(0);
+    // sleep(4);
+    // c.KillProcess(0);
+    // sleep(4);
+    // c.KillProcess(1);
+    // sleep(4);
+    // c.KillProcess(2);
     c.WaitForThreadJoins();
 
 

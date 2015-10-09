@@ -114,7 +114,6 @@ void* ReceiveStateOrDecReq(void* _arg) {
     ReceiveSDRThreadArgument* arg = (ReceiveSDRThreadArgument*)_arg;
     Process* p = arg->p;
     int pid = arg->pid_to_whom;
-
     char buf[kMaxDataSize];
     int num_bytes;
     pthread_t sr_response_thread;
@@ -132,7 +131,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
         }
         else if (num_bytes == 0)
         {   //connection closed
-            cout << "P" << p->get_pid() << ": SDR connection closed by P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": SDR connection closed by P" << pid << endl;
             p->RemoveFromUpSet(pid);
             // no need to exit even if there is a timeout. Hopefully in future, pid will recover
             // and SDRconnect to this process which will set the sdr_fd correctly
@@ -207,6 +206,52 @@ void* ReceiveStateOrDecReq(void* _arg) {
     }
 }
 
+
+void* responder(void *_p) {
+
+    Process *p = (Process *)_p;
+    p->SendState(p->get_my_coordinator());
+    // cout << "sent state to new coord at " << time(NULL) % 100 << endl;
+    ProcessState my_st = p->get_my_state();
+    if (!(my_st == UNCERTAIN || my_st == COMMITTABLE))
+        return NULL;
+
+    if (my_st == UNCERTAIN)
+    {
+        p->ReceivePreCommitOrAbortFromCoordinator();
+        if (p->get_my_state() == UNCERTAIN)
+            p->Timeout();
+        else if (p->get_my_state() == ABORTED)
+            p->LogAbort();
+        else {
+            p->LogPreCommit();
+            p->SendMsgToCoordinator(kAck);
+            // cout << p->get_pid() << " sent ack to coord at " << time(NULL) % 100 << endl;
+        }
+    }
+    else {
+        p->ReceiveAnythingFromCoordinator();
+        if (p->get_my_state() == COMMITTABLE) {
+            p->LogPreCommit();
+            p->SendMsgToCoordinator(kAck);
+            // cout << p->get_pid() << " sent ack to coord at " << time(NULL) % 100 << endl;
+
+            p->ReceiveCommitFromCoordinator();
+            if (p->get_my_state() == COMMITTABLE)
+                p->Timeout();
+            else {
+                p->LogCommit();
+            }
+        } else if (p->get_my_state() == COMMITTED) {
+            p->LogCommit();
+        } else {
+            p->LogAbort();  // should be impossible
+        }
+
+    }
+
+    return NULL;
+}
 
 // // thread for receiveing SR/DR messages from other processes
 // void* ReceiveStateOrDecReq(void *_p) {
@@ -329,42 +374,3 @@ void* ReceiveStateOrDecReq(void* _arg) {
 //     }
 //     return NULL;
 // }
-
-void* responder(void *_p) {
-
-    Process *p = (Process *)_p;
-    p->SendState(p->get_my_coordinator());
-    cout << "sent state to new coord at " << time(NULL) % 100 << endl;
-    ProcessState my_st = p->get_my_state();
-    if (!(my_st == UNCERTAIN || my_st == COMMITTABLE))
-        return NULL;
-
-    if (my_st == UNCERTAIN)
-    {
-        p->ReceivePreCommitOrAbortFromCoordinator();
-        if (p->get_my_state() == UNCERTAIN)
-            p->Timeout();
-        else if (p->get_my_state() == ABORTED)
-            p->LogAbort();
-        else {
-            p->LogPreCommit();
-            p->SendMsgToCoordinator(kAck);
-            cout << p->get_pid() << " sent ack to coord at " << time(NULL) % 100 << endl;
-        }
-    }
-    else {
-        p->ReceivePreCommitOrAbortFromCoordinator();
-        p->LogPreCommit();
-        p->SendMsgToCoordinator(kAck);
-        cout << p->get_pid() << " sent ack to coord at " << time(NULL) % 100 << endl;
-
-        p->ReceiveCommitFromCoordinator();
-        if (p->get_my_state() == COMMITTABLE)
-            p->Timeout();
-        else {
-            p->LogCommit();
-        }
-    }
-
-    return NULL;
-}

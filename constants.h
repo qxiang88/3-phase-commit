@@ -6,7 +6,7 @@ using namespace std;
 
 #define PR(x) cout << #x " = " << x << "\n";
 
-const string kConfigFile = "./config";
+const string kConfigFile = "./configs/config";
 const string kLogFile = "./log/log";
 const string kPlaylistFile = "./playlist/playlist";
 const int kMaxDataSize = 200 ;          // max number of bytes we can get at once
