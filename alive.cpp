@@ -18,27 +18,6 @@ using namespace std;
 
 pthread_mutex_t up_lock;
 
-// void Process::UpdateUpSet(std::unordered_set<int> &alive_processes) {
-//     bool change = false;
-//     pthread_mutex_lock(&up_lock);
-
-//     auto it = up_.begin();
-//     while (it != up_.end()) {
-//         if (alive_processes.find(*it) == alive_processes.end()) { // process is no longer alive
-//             change = true;
-//             cout << "P" << get_pid() << ": Removing P" << *it << " from UP set" << endl;
-//             it = up_.erase(it);
-//         } else {
-//             it++;
-//         }
-//     }
-//     pthread_mutex_unlock(&up_lock);
-
-//     if (change) {
-//         LogUp();
-//     }
-// }
-
 void Process::RemoveFromUpSet(int k) {
     bool log = false;
     pthread_mutex_lock(&up_lock);
@@ -53,7 +32,6 @@ void Process::RemoveFromUpSet(int k) {
     if(log)
         LogUp();
 }
-
 
 // function to initiate a connect() request to process _pid
 // returns true if connection was successfull
@@ -154,15 +132,6 @@ bool Process::ConnectToProcessAlive(int process_id) {
     return true;
 }
 
-
-
-
-
-
-
-
-
-
 // thread for receiveing ALIVE messages from other processes
 void* ReceiveAlive(void *_rcv_thread_arg) {
     // cout<<"receive alive entered"<<endl;
@@ -170,37 +139,18 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
     Process *p = rcv_thread_arg->p;
     int pid = rcv_thread_arg->pid_from_whom;
 
-    // if(p->get_my_coordinator()==p->get_pid())
-    //     usleep(kGeneralSleep);
-    
-    ofstream outf("log/recalivelog"+to_string(p->get_pid())+"from"+to_string(pid));
+    ofstream outf("log/recalivelog/"+to_string(p->get_pid())+"from"+to_string(pid));
 
     char buf[kMaxDataSize];
     int num_bytes;
-    // map<int, set<string> > buffered_alives;
     set<string> buffered_alives;
 
-    // fd_set temp_set;
-    // int fd_max;
-
-    // PrintUpSet(p->get_pid(), p->up_);
-    // usleep(kGeneralSleep);
     while (true) {
-        // timeval zero;
-        // zero.tv_sec = 0;
-        // zero.tv_usec = 0;
-        // no need to lock mutex here since updates to UP are perfomed
-        // by this thread itself at the end.
-        // FD_ZERO(&temp_set);
-        // FD_SET(p->get_alive_fd(pid), &temp_set);
-        // fd_max = p->get_alive_fd(pid);
-        
         string alive_to_check = "ALIVE"+to_string(time(NULL)%100);
         usleep(kReceiveAliveTimeout);
         
         // int rv = select(fd_max + 1, &temp_set, NULL, NULL, &zero);
         int rv = 0;
-        // cout<<"left select "<<endl;
         if (rv == -1) {
             cout << "P" << p->get_pid() << ": ERROR in select() in Alive receive" << endl;
             // pthread_exit(NULL);
@@ -211,12 +161,8 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
             if (num_bytes == -1 || num_bytes==0) 
             {
                 // cout << "P" << p->get_pid() << ": ERROR in receiving ALIVE for P" << pid << endl;
-                    p->RemoveFromUpSet(pid);
-                    // pthread_mutex_lock(&up_lock);
-                    // unordered_set <int> copy_up(p->up_);
-                    // pthread_mutex_unlock(&up_lock);
-                    // PrintUpSet(p->get_pid(), copy_up);
-                    return NULL;
+                p->RemoveFromUpSet(pid);
+                return NULL;
                 // pthread_exit(NULL); //TODO: think about whether it should be exit or not
             } 
             else 
@@ -230,7 +176,6 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
                 for(auto iter = all_msgs.begin(); iter!=all_msgs.end(); iter++)
                 {
                     buffered_alives.insert(*iter);    
-                    // cout<<"inserting into "<<pid<<" "<<*iter<<endl;
                 }
 
                 // cout<<p->get_pid()<<" looking for "<<alive_to_check<<" from "<<pid<<endl;
@@ -271,7 +216,7 @@ void* SendAlive(void *_p) {
     Process *p = (Process *)_p;
     // if(p->get_my_coordinator()==p->get_pid())
     //     usleep(kGeneralSleep);
-    ofstream outf("log/sendalivelog"+to_string(p->get_pid()));
+    ofstream outf("log/sendalivelog/"+to_string(p->get_pid()));
     while (true) {
         string msg = kAlive;
         msg+=to_string(time(NULL)%100);

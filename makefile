@@ -28,4 +28,6 @@ clean:
 	rm -f *.o controller
 
 cleanlog:
-	rm -f log/*
+	rm -rf log/*
+	mkdir log/recalivelog/
+	mkdir log/sendalivelog/
