@@ -173,7 +173,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
     // if(p->get_my_coordinator()==p->get_pid())
     //     usleep(kGeneralSleep);
     
-    ofstream outf("log/recalivelog"+to_string(p->get_pid())+"from"+to_string(pid));
+    ofstream outf("log/recalivelog/"+to_string(p->get_pid())+"from"+to_string(pid));
 
     char buf[kMaxDataSize];
     int num_bytes;
@@ -271,7 +271,7 @@ void* SendAlive(void *_p) {
     Process *p = (Process *)_p;
     // if(p->get_my_coordinator()==p->get_pid())
     //     usleep(kGeneralSleep);
-    ofstream outf("log/sendalivelog"+to_string(p->get_pid()));
+    ofstream outf("log/sendalivelog/"+to_string(p->get_pid()));
     while (true) {
         string msg = kAlive;
         msg+=to_string(time(NULL)%100);
