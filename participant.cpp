@@ -226,7 +226,7 @@ void Process::ReceiveCommitFromCoordinator() {
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << get_pid() << ": Msg received from P" << pid << ": " << buf <<  endl;
+            cout << "P" << get_pid() << ": Msg received from P" << pid << ": " << buf <<  "at "<<time(NULL)%100<<endl;
 
             string extracted_msg;
             int received_tid;
@@ -333,6 +333,7 @@ void Process::ParticipantMode() {
         {   // coord sent PRE-COMMIT
             LogPreCommit();
             SendMsgToCoordinator(kAck);
+            cout<<pid_<<" sent ack to coord at "<<time(NULL)%100<<endl;
             ReceiveCommitFromCoordinator();
             //this detects timeout, exits and state will be the same as intial
             if (my_state_ == COMMITTED)
@@ -370,7 +371,6 @@ void Process::ParticipantMode() {
 
 
 //TODO: when participant recovers, make sure that it ignores STATE-REQ from new coord
-
     while (!(my_state_ == ABORTED || my_state_ == COMMITTED))
     {
         //what does this thread do while timeout() waiting for SR thread to respond.
@@ -380,6 +380,7 @@ void Process::ParticipantMode() {
 
         //if this participant is new coord, then it will have waited there to get a decision
         //else, we have to log abort or commit in SR thread receiving part
+        usleep(kGeneralSleep);
     }
 
     if (my_state_ == ABORTED)

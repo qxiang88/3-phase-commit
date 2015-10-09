@@ -13,6 +13,7 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <limits.h>
 using namespace std;
 
 pthread_mutex_t up_lock;
@@ -43,6 +44,9 @@ void Process::RemoveFromUpSet(int k) {
     if(up_.find(k)!=up_.end())
         up_.erase(k);
     pthread_mutex_unlock(&up_lock);
+    if(k==my_coordinator_){
+        my_coordinator_ = INT_MAX;
+    }
     LogUp();
 }
 

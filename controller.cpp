@@ -175,8 +175,8 @@ int main() {
     if (!c.ReadConfigFile()) return 1;
     c.CreateTransactions();
     if (!c.CreateProcesses()) return 1;
-    sleep(5);
-    c.KillProcess(0);
+    // sleep(6);
+    // c.KillProcess(0);
     c.WaitForThreadJoins();
 
 

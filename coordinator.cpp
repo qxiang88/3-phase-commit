@@ -170,9 +170,7 @@ void Process::WaitForStates() {
     void* status;
     i = 0;
     for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
-        cout << "about to join " << it->first << endl;
         pthread_join(receive_thread[i], &status);
-        cout << "joined " << it->first << endl;
         RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->st) == UNINITIALIZED) {
             //TODO: not necessarily. handle
@@ -184,7 +182,7 @@ void Process::WaitForStates() {
 
         }
         i++;
-        cout << "enum val" << it->second << endl;
+        cout<<"Set received state as "<<it->second<<"at "<<(time(NULL)%100)<<endl;
     }
 }
 
@@ -479,12 +477,12 @@ void Process::CoordinatorMode() {
 
     CreateAliveThreads(receive_alive_threads, send_alive_thread);
     WaitForVotes();
-
     string trans = get_transaction(transaction_id_);
     //TODO: Handle case when trans = "NULL". See also ConstructVoteReq same cases
     Vote(trans); //coordinator's self vote
     // iterate through the states of all processes
     bool abort = false;
+
     for (const auto& ps : participant_state_map_) {
         if (ps.second == PROCESSTIMEOUT || ps.second == ABORTED) {
             abort = true;
@@ -507,8 +505,6 @@ void Process::CoordinatorMode() {
             }
         }
     } else {
-
-        return;
 
         LogPreCommit();
         SendPreCommitToAll();
@@ -550,19 +546,19 @@ void* NewCoordinatorMode(void * _p) {
     outf << "sent state req" << endl;
     p->WaitForStates();
 
-    ProcessState my_state_ = p->get_my_state();
+    ProcessState my_st = p->get_my_state();
     // iterate through the states of all processes
     // bool abort = false, committed = false, commit = false, ;
     //ProcessState key = ABORTED;
     auto it = p->participant_state_map_.find(ABORTED);
-    if (my_state_ == ABORTED || it != p->participant_state_map_.end())
+    if (my_st == ABORTED || it != p->participant_state_map_.end())
     {
-        if (my_state_ != ABORTED)
+        if (my_st != ABORTED)
         {
             p->LogAbort();
             //only log if other process is abort.
             //if i know aborted, means already in log abort
-            my_state_ = ABORTED;
+            my_st = ABORTED;
 
         }
 
@@ -575,12 +571,12 @@ void* NewCoordinatorMode(void * _p) {
 
     // key = COMMITTED;
     it = p->participant_state_map_.find(COMMITTED);
-    if (my_state_ == COMMITTED || it != p->participant_state_map_.end())
+    if (my_st == COMMITTED || it != p->participant_state_map_.end())
     {
-        if (my_state_ != COMMITTED)
+        if (my_st != COMMITTED)
         {
             p->LogCommit();
-            my_state_ = COMMITTED;
+            my_st = COMMITTED;
 
 
         }
@@ -597,9 +593,9 @@ void* NewCoordinatorMode(void * _p) {
             break;
         }
     }
-    if (uncert && my_state_ == UNCERTAIN)
+    if (uncert && my_st == UNCERTAIN)
     {
-        outf << "sending abort" << endl;
+        outf << "sending abort"<<  "at "<<time(NULL)%100<<endl;
         p->LogAbort();
         for (const auto& ps : p->participant_state_map_) {
             p->SendAbortToProcess(ps.first);
@@ -611,14 +607,18 @@ void* NewCoordinatorMode(void * _p) {
     //some are commitable
     p->LogPreCommit();
     for (const auto& ps : p->participant_state_map_) {
-        if (ps.second == UNCERTAIN)
-            p->SendPreCommitToProcess(ps.first);
+        // if (ps.second == UNCERTAIN)
+        //     {
+                p->SendPreCommitToProcess(ps.first);
+                outf<<"sending pc to uncertain"<< "at "<<time(NULL)%100<<endl;
+            // }
     }
     p->WaitForAck();
     p->LogCommit();
+    p->set_my_state(COMMITTED);
     p->SendCommitToAll();
-
-    if (my_state_ == ABORTED)
+    outf<<"sent commit "<< "at "<<time(NULL)%100<<endl;
+    if(my_st==ABORTED)
         p->prev_decisions_.push_back(ABORT);
     else
         p->prev_decisions_.push_back(COMMIT);
