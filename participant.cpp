@@ -88,20 +88,24 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
-        pthread_exit(NULL);
+        // pthread_exit(NULL);
     } else if (rv == 0) {   //timeout
         // cout<<"TIMEOUT"<<endl;
         my_state_ = ABORTED;
+        RemoveFromUpSet(pid);
+
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
-            pthread_exit(NULL); //TODO: think about whether it should be exit or not
+            RemoveFromUpSet(pid);
+            // pthread_exit(NULL); //TODO: think about whether it should be exit or not
         } else if (num_bytes == 0) {     //connection closed
             cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
             // if coordinator closes connection, it is equivalent to coordinator crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
             my_state_ = ABORTED;
+            RemoveFromUpSet(pid);
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
@@ -148,19 +152,20 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
-        pthread_exit(NULL);
-    } else if (rv == 0) {   
+        // pthread_exit(NULL);
+    } else if (rv == 0) {
         //timeout
+        RemoveFromUpSet(pid);
         //do i need to set somethign here
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
-            pthread_exit(NULL); //TODO: think about whether it should be exit or not
+            RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
             cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
             // if coordinator closes connection, it is equivalent to coordinator crashing
             // can treat it as TIMEOUT
-            
+            RemoveFromUpSet(pid);
             // TODO: verify argument
             // execute actions same as above if(rv==0) case
             //TODO: handle connection close based on different cases
@@ -203,15 +208,17 @@ void Process::ReceiveCommitFromCoordinator() {
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
-        pthread_exit(NULL);
-    } else if (rv == 0) {   
-    //timeout
+        // pthread_exit(NULL);
+    } else if (rv == 0) {
+        //timeout
+        RemoveFromUpSet(pid);
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
-            pthread_exit(NULL); //TODO: think about whether it should be exit or not
+            RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
             cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
+            RemoveFromUpSet(pid);
             // if coordinator closes connection, it is equivalent to coordinator crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
@@ -285,8 +292,20 @@ void Process::ParticipantMode() {
         vector<pthread_t> receive_alive_threads(up_.size());
         CreateAliveThreads(receive_alive_threads, send_alive_thread);
 
-        pthread_t rec_sr_dr_thread;
-        CreateSDRThread(rec_sr_dr_thread);
+        // one sdr receive thread for each participant, not just those in up_
+        // because any participant could ask for Dec Req in future.
+        // size = participant_.size()-1 because it contains self
+        vector<pthread_t> sdr_receive_threads(participants_.size() - 1);
+        int i = 0;
+        for (auto it = participants_.begin(); it != participants_.end(); ++it) {
+            //make sure you don't create a SDR receive thread for self
+            if (*it == get_pid()) continue;
+            CreateSDRThread(*it, sdr_receive_threads[i]);
+            i++;
+        }
+
+        // vector<pthread_t> sdr_receive_thread;
+        // CreateSDRThread(sdr_receive_thread);
         // usleep(kGeneralSleep); //sleep to make sure connections are established
     }
 
@@ -294,29 +313,29 @@ void Process::ParticipantMode() {
         //ignore log as doesnt matter when participant doesnt get votereq
         return;
     }
-    
+
     //else
     LogVoteReq();
     Vote(transaction_msg);
 
-    if (my_state_ ==  ABORTED) 
-    { //participant's vote was NO
+    if (my_state_ ==  ABORTED)
+    {   //participant's vote was NO
         SendMsgToCoordinator(kNo);
         LogAbort();
-    } 
-    else 
-    { //participant's vote was YES
+    }
+    else
+    {   //participant's vote was YES
         LogYes();
         SendMsgToCoordinator(kYes);
         ReceivePreCommitOrAbortFromCoordinator();
 
-        if (my_state_ == COMMITTABLE) 
-        { // coord sent PRE-COMMIT
+        if (my_state_ == COMMITTABLE)
+        {   // coord sent PRE-COMMIT
             LogPreCommit();
             SendMsgToCoordinator(kAck);
             ReceiveCommitFromCoordinator();
             //this detects timeout, exits and state will be the same as intial
-            if (my_state_ == COMMITTED) 
+            if (my_state_ == COMMITTED)
             {
                 LogCommit();
             }
@@ -324,12 +343,12 @@ void Process::ParticipantMode() {
             {
                 RemoveFromUpSet(my_coordinator_);
                 Timeout();
-                
+
             }
         }
 
-        else if (my_state_ == ABORTED) 
-        { // coord sent ABORT
+        else if (my_state_ == ABORTED)
+        {   // coord sent ABORT
             LogAbort();
         }
 
@@ -337,42 +356,42 @@ void Process::ParticipantMode() {
         {
             RemoveFromUpSet(my_coordinator_);
             Timeout();
-            
+
         }
-            // TODO: might need to check other values of my_state_
-            // because of results of termination protocol 
+        // TODO: might need to check other values of my_state_
+        // because of results of termination protocol
     }
 
     //participant_termination_protocol
-    //wait till a) new_coord_thread exits (wait it will aslo exit when someone 
+    //wait till a) new_coord_thread exits (wait it will aslo exit when someone
     //                                     else becomes new coord) or
     //          b) till new coord sends me dec
     //      i can just wait till b if recv dec is handled by someone
 
-    
+
 //TODO: when participant recovers, make sure that it ignores STATE-REQ from new coord
 
-    while(!(my_state_==ABORTED || my_state_==COMMITTED))
+    while (!(my_state_ == ABORTED || my_state_ == COMMITTED))
     {
-    //what does this thread do while timeout() waiting for SR thread to respond. 
-    //maybe i can just do, wait till a decision is made by SR thread
-    //know with the use of a shared variable
-    //waiting blocking
+        //what does this thread do while timeout() waiting for SR thread to respond.
+        //maybe i can just do, wait till a decision is made by SR thread
+        //know with the use of a shared variable
+        //waiting blocking
 
-    //if this participant is new coord, then it will have waited there to get a decision
-    //else, we have to log abort or commit in SR thread receiving part
-    }  
-    
-    if(my_state_==ABORTED)
+        //if this participant is new coord, then it will have waited there to get a decision
+        //else, we have to log abort or commit in SR thread receiving part
+    }
+
+    if (my_state_ == ABORTED)
         prev_decisions_.push_back(ABORT);
     else
-        prev_decisions_.push_back(COMMIT);  
+        prev_decisions_.push_back(COMMIT);
 }
 
 
-    
-    // create thread 1 that always receives state requests
-    //     if it receives one SR, then create a thread 2 that prepares response and waits for it.
-    //     if another SR comes to thread 1, then 
-    //         if 2 is still waiting for something, kill thread 2 
-    //         if thread 2 has made a dec and exits, then return state to SR request
+
+// create thread 1 that always receives state requests
+//     if it receives one SR, then create a thread 2 that prepares response and waits for it.
+//     if another SR comes to thread 1, then
+//         if 2 is still waiting for something, kill thread 2
+//         if thread 2 has made a dec and exits, then return state to SR request

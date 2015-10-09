@@ -75,7 +75,7 @@ public:
     void ReceivePreCommitOrAbortFromCoordinator();
     void ReceiveCommitFromCoordinator();
     void CreateAliveThreads(vector<pthread_t> &receive_alive_thread, pthread_t &send_alive_thread);
-    void CreateSDRThread(pthread_t&);
+    void CreateSDRThread(int process_id, pthread_t &sdr_receive_thread);
     void UpdateUpSet(std::unordered_set<int> &alive_processes);
     void RemoveFromUpSet(int);
     void ConstructUpSet();
@@ -220,6 +220,12 @@ struct ReceiveAliveThreadArgument
 {
     Process *p;
     int pid_from_whom;
+};
+
+struct ReceiveSDRThreadArgument
+{
+    Process *p;
+    int pid_to_whom;
 };
 
 #endif //PROCESS_H

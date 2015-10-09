@@ -170,9 +170,9 @@ void Process::WaitForStates() {
     void* status;
     i = 0;
     for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
-        cout<<"about to join "<<it->first<<endl;
+        cout << "about to join " << it->first << endl;
         pthread_join(receive_thread[i], &status);
-        cout<<"joined "<<it->first<<endl;
+        cout << "joined " << it->first << endl;
         RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->st) == UNINITIALIZED) {
             //TODO: not necessarily. handle
@@ -184,7 +184,7 @@ void Process::WaitForStates() {
 
         }
         i++;
-        cout<<"enum val"<<it->second<<endl;
+        cout << "enum val" << it->second << endl;
     }
 }
 
@@ -457,8 +457,18 @@ void Process::CoordinatorMode() {
     pthread_t send_alive_thread;
     vector<pthread_t> receive_alive_threads(up_.size());
 
-    pthread_t rec_sr_dr_thread;
-    CreateSDRThread(rec_sr_dr_thread);
+    // one sdr receive thread for each participant, not just those in up_
+    // because any participant could ask for Dec Req in future.
+    // size = participant_state_map_.size() because it does not contain self
+    vector<pthread_t> sdr_receive_threads(participant_state_map_.size());
+    int i = 0;
+    for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it) {
+        //make sure you don't create a SDR receive thread for self
+        if (it->first == get_pid()) continue;
+        CreateSDRThread(it->first, sdr_receive_threads[i]);
+        i++;
+    }
+    // CreateSDRThread(sdr_receive_threads);
 
     string msg;
     ConstructVoteReq(msg);
@@ -481,7 +491,6 @@ void Process::CoordinatorMode() {
             break;
         }
     }
-
     if (my_state_ == ABORTED)
         abort = true;
 
@@ -489,7 +498,7 @@ void Process::CoordinatorMode() {
 
         LogAbort();
         my_state_ = ABORTED;
-        
+
         // send ABORT message to all participants which voted YES
         for (const auto& ps : participant_state_map_) {
             if (ps.second == UNCERTAIN) {
@@ -504,14 +513,14 @@ void Process::CoordinatorMode() {
         LogPreCommit();
         SendPreCommitToAll();
         WaitForAck();
-        
+
         LogCommit();
         my_state_ = COMMITTED;
-        
+
         SendCommitToAll();
     }
 
-    if(my_state_==ABORTED)
+    if (my_state_ == ABORTED)
         prev_decisions_.push_back(ABORT);
     else
         prev_decisions_.push_back(COMMIT);
@@ -520,9 +529,9 @@ void Process::CoordinatorMode() {
 void* NewCoordinatorMode(void * _p) {
     //TODO: send tid to ConstructVoteReq;
     Process *p = (Process *)_p;
-    
 
-    ofstream outf("log/newcoord"+to_string(p->get_pid())+","+to_string(time(NULL)%100), fstream::app);
+
+    ofstream outf("log/newcoord" + to_string(p->get_pid()) + "," + to_string(time(NULL) % 100), fstream::app);
     outf << "NewCoordSet" << p->get_pid() << endl;
 
     // connect to each participant
@@ -538,7 +547,7 @@ void* NewCoordinatorMode(void * _p) {
     p->ConstructStateReq(msg);
 
     p->SendStateReqToAll(msg);
-    outf << "sent state req"<< endl;
+    outf << "sent state req" << endl;
     p->WaitForStates();
 
     ProcessState my_state_ = p->get_my_state();
@@ -551,8 +560,8 @@ void* NewCoordinatorMode(void * _p) {
         if (my_state_ != ABORTED)
         {
             p->LogAbort();
-            //only log if other process is abort. 
-            //if i know aborted, means already in log abort            
+            //only log if other process is abort.
+            //if i know aborted, means already in log abort
             my_state_ = ABORTED;
 
         }
@@ -572,7 +581,7 @@ void* NewCoordinatorMode(void * _p) {
         {
             p->LogCommit();
             my_state_ = COMMITTED;
-            
+
 
         }
         p->SendCommitToAll();
@@ -590,7 +599,7 @@ void* NewCoordinatorMode(void * _p) {
     }
     if (uncert && my_state_ == UNCERTAIN)
     {
-        outf << "sending abort"<< endl;
+        outf << "sending abort" << endl;
         p->LogAbort();
         for (const auto& ps : p->participant_state_map_) {
             p->SendAbortToProcess(ps.first);
@@ -609,7 +618,7 @@ void* NewCoordinatorMode(void * _p) {
     p->LogCommit();
     p->SendCommitToAll();
 
-    if(my_state_==ABORTED)
+    if (my_state_ == ABORTED)
         p->prev_decisions_.push_back(ABORT);
     else
         p->prev_decisions_.push_back(COMMIT);

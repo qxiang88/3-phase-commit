@@ -332,8 +332,11 @@ void Process::CreateAliveThreads(vector<pthread_t> &receive_alive_threads, pthre
     CreateThread(send_alive_thread, SendAlive, (void *)this);
 }
 
-void Process::CreateSDRThread(pthread_t &rec_sr_dr_thread) {
-    CreateThread(rec_sr_dr_thread, ReceiveStateOrDecReq, (void *)this);
+void Process::CreateSDRThread(int process_id, pthread_t &sdr_receive_thread) {
+    ReceiveSDRThreadArgument *rcv_thread_arg = new ReceiveSDRThreadArgument;
+    rcv_thread_arg-> p = this;
+    rcv_thread_arg->pid_to_whom = process_id;
+    CreateThread(sdr_receive_thread, ReceiveStateOrDecReq, (void *)rcv_thread_arg);
 }
 
 void Process::AddToLog(string s, bool new_round)
