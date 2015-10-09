@@ -432,7 +432,6 @@ void Process::CoordinatorMode() {
     //TODO: send it to ConstructVoteReq;
 
     // connect to each participant
-
     for (int i = 0; i < N; ++i) {
         if (i == get_pid()) continue;
         if (ConnectToProcess(i)) {
@@ -507,7 +506,6 @@ void Process::CoordinatorMode() {
         LogPreCommit();
         SendPreCommitToAll();
         WaitForAck();
-
         LogCommit();
         my_state_ = COMMITTED;
 
@@ -523,8 +521,6 @@ void Process::CoordinatorMode() {
 void* NewCoordinatorMode(void * _p) {
     //TODO: send tid to ConstructVoteReq;
     Process *p = (Process *)_p;
-
-
     ofstream outf("log/newcoord" + to_string(p->get_pid()) + "," + to_string(time(NULL) % 100), fstream::app);
     outf << "NewCoordSet" << p->get_pid() << endl;
 
@@ -545,17 +541,7 @@ void* NewCoordinatorMode(void * _p) {
     p->WaitForStates();
     ProcessState my_st = p->get_my_state();
     
-
-
     // if(p->get_pid() == 1) return NULL;
-    // my_st = COMMITTED;
-    
-
-
-
-    // iterate through the states of all processes
-    // bool abort = false, committed = false, commit = false, ;
-    //ProcessState key = ABORTED;
 
     bool aborted = false;
     for (const auto& ps : p->participant_state_map_) {
@@ -628,12 +614,9 @@ void* NewCoordinatorMode(void * _p) {
     //else
     //some are commitable
     p->LogPreCommit();
+    outf<<"sending precommit at "<<time(NULL)%100<<endl;
     for (const auto& ps : p->participant_state_map_) {
-        // if (ps.second == UNCERTAIN)
-        //     {
         p->SendPreCommitToProcess(ps.first);
-        outf << "sending pc " << "at " << time(NULL) % 100 << endl;
-        // }
     }
     p->WaitForAck();
     p->LogCommit();
