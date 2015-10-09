@@ -470,6 +470,7 @@ void Process::CoordinatorMode() {
     ConstructVoteReq(msg);
     SendVoteReqToAll(msg);
     LogStart();
+    LogUp();
 
 
     CreateAliveThreads(receive_alive_threads, send_alive_thread);
@@ -504,6 +505,7 @@ void Process::CoordinatorMode() {
     } else {
 
         LogPreCommit();
+        return;
         SendPreCommitToAll();
         WaitForAck();
         LogCommit();

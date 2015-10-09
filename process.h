@@ -49,10 +49,10 @@ typedef enum
 
     // process has completed 3PC for the curr transaction. Coordinator mode/Participant Mode over
     DONE,
-    
+
     // process has crashed during the curr transaction
     FAILED,
-    
+
     // process is in recovery mode. This means it failed in the past. When it reaches a decision,
     // its state should change to DONE
     RECOVERY
@@ -155,6 +155,13 @@ public:
     void set_my_state(ProcessState state);
     ProcessRunningStatus get_my_status();
     void set_my_status(ProcessRunningStatus status);
+    void set_server_sockfd(int socket_fd);
+    int get_server_sockfd();
+    void Close_server_sockfd();
+    void reset_fd(int process_id);
+    void reset_alive_fd(int process_id);
+    void reset_sdr_fd(int process_id);
+
 
 
     // list of processes operational for a transaction (and hence, an iteration of 3PC)
@@ -197,6 +204,7 @@ private:
 
     // Process' own running status
     ProcessRunningStatus my_status_;
+    int server_sockfd_;
     // bool am_coordinator_;
 
     // the coordinator which this process perceives

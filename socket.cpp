@@ -112,15 +112,15 @@ bool Process::ConnectToProcess(int process_id) {
     {
         if (connect(sockfd, l->ai_addr, l->ai_addrlen) == -1) {
             close(sockfd);
-            cout << "P" << get_pid() << ": Client: connect ERROR\n";
+            // cout << "P" << get_pid() << ": Client: connect ERROR\n";
             continue;
         }
 
         break;
     }
     if (l == NULL) {
-        fprintf(stderr, "client: failed to connect\n");
-        return false;
+        cout << "P" << get_pid() << ": Client: connect ERROR\n";
+        exit(1);
     }
     int outgoing_port = ntohs(return_port_no((struct sockaddr *)l->ai_addr));
     // cout << "P" << get_pid() << ": Client: connecting to " << outgoing_port << endl ;
@@ -184,6 +184,8 @@ void* server(void* _p) {
         exit(1);
     }
 
+    p->set_server_sockfd(sockfd);
+
     if (listen(sockfd, kBacklog) == -1) {
         perror("listen ERROR");
         exit(1);
@@ -211,18 +213,18 @@ void* server(void* _p) {
         if (process_id != -1) {   // incoming connection is from send_port
             p->set_fd(process_id, new_fd);
             // cout << "P" << p->get_pid() << ": Server: accepting connection from P"
-                 // << p->get_send_port_pid_map(incoming_port) << endl;
-        } else {    
+            // << p->get_send_port_pid_map(incoming_port) << endl;
+        } else {
             process_id = p->get_alive_port_pid_map(incoming_port);
-            if(process_id != -1) { // incoming connection is from alive port
+            if (process_id != -1) { // incoming connection is from alive port
                 p->set_alive_fd(process_id, new_fd);
                 // cout << "P" << p->get_pid() << ": Server: accepting ALIVE connection from P"
-                     // << p->get_alive_port_pid_map(incoming_port) << endl;
+                // << p->get_alive_port_pid_map(incoming_port) << endl;
             } else {
                 process_id = p->get_sdr_port_pid_map(incoming_port);
                 p->set_sdr_fd(process_id, new_fd);
-                    // cout << "P" << p->get_pid() << ": Server: accepting SDR connection from P"
-                         // << p->get_sdr_port_pid_map(incoming_port) << endl;
+                // cout << "P" << p->get_pid() << ": Server: accepting SDR connection from P"
+                // << p->get_sdr_port_pid_map(incoming_port) << endl;
             }
         }
     }

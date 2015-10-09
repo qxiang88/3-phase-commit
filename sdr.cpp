@@ -1,6 +1,7 @@
 #include "process.h"
 #include "constants.h"
 #include "iostream"
+#include "fstream"
 #include "unistd.h"
 #include <errno.h>
 #include <string.h>
@@ -118,12 +119,17 @@ void* ReceiveStateOrDecReq(void* _arg) {
     int num_bytes;
     pthread_t sr_response_thread;
 
+    ofstream outf("log/sdr/" + to_string(p->get_pid()) + "from" + to_string(pid));
+
+    if (!outf.is_open())
+        cout << "Failed to open log file for sdr" << endl;
+
     while (true) {
         // currently, this loop sleeps at the end for kGeneralSleep
         // TODO: confirm whether this is the right amount of sleep
         if ((num_bytes = recv(p->get_sdr_fd(pid), buf, kMaxDataSize - 1, 0)) == -1)
         {
-            cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << endl;
             p->RemoveFromUpSet(pid);
             // no need to exit even if there is an error. Hopefully in future, pid will recover
             // and SDRconnect to this process which will set the sdr_fd correctly
@@ -131,7 +137,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
         }
         else if (num_bytes == 0)
         {   //connection closed
-            // cout << "P" << p->get_pid() << ": SDR connection closed by P" << pid << endl;
+            cout << "P" << p->get_pid() << ": SDR connection closed by P" << pid << endl;
             p->RemoveFromUpSet(pid);
             // no need to exit even if there is a timeout. Hopefully in future, pid will recover
             // and SDRconnect to this process which will set the sdr_fd correctly
@@ -144,7 +150,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
             int recvd_tid;
             buffer_data = string(buf);
             p->ExtractMsg(buffer_data, type_req, recvd_tid);
-            cout << "P" << p->get_pid() << ": SDR recevd from P" << pid << ": " << buf <<  endl;
+            outf << "P" << p->get_pid() << ": SDR recevd from P" << pid << ": " << buf <<  endl;
             if (type_req == kStateReq)
             {   //assumes state req has to be current tid
 
@@ -189,6 +195,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
                 p->CreateThread(p->newcoord_thread, NewCoordinatorMode, (void *)p);
             }
             else { //decreq
+                outf<<"Dec req received "<<p->get_my_state()<<endl;
                 if (recvd_tid == p->get_transaction_id())
                 {
                     if (p->get_my_state() == COMMITTED || p->get_my_state() == ABORTED)

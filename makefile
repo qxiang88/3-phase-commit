@@ -31,3 +31,4 @@ cleanlog:
 	rm -rf log/*
 	mkdir log/recalivelog/
 	mkdir log/sendalivelog/
+	mkdir log/sdr/

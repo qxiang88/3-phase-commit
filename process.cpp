@@ -53,13 +53,14 @@ void* ThreadEntry(void* _p) {
             cout << "P" << p->get_pid() << ": Participant mode over" << endl;
             p->set_my_status(DONE);
         }
-    } else if(p->get_my_status() == RECOVERY) {
-        // TODO: Recovery mode for process
-
-        // TODO: set_my_status after recovery is complete
+    } else if (p->get_my_status() == RECOVERY) {
+        cout << "Resurrecting process " << p->get_pid() << endl;
+        p->Recovery();
+        p->set_my_status(DONE);
+        cout << "P" << p->get_pid() << ": Recovery mode over" << endl;
     } else {
-            cout << "P" << p->get_pid() << ": Unexpected Status" << endl;
-            //TODO: verify if process can enter ThreadEntry with any other runningstatus
+        cout << "P" << p->get_pid() << ": Unexpected Status" << endl;
+        //TODO: verify if process can enter ThreadEntry with any other runningstatus
     }
 
     void* status;
@@ -73,13 +74,19 @@ void Process::Initialize(int pid, string log_file, string playlist_file,
     pid_ = pid;
     log_file_ = log_file;
     playlist_file_ = playlist_file;
+    log_.clear();
+    fd_.clear();
+    alive_fd_.clear();
+    sdr_fd_.clear();
+    process_state_.clear();
+    thread_set.clear();
+
     fd_.resize(N, -1);
     alive_fd_.resize(N, -1);
     sdr_fd_.resize(N, -1);
     process_state_.resize(N, UNINITIALIZED);
     my_state_ = UNINITIALIZED;
     transaction_id_ = 0;
-    thread_set.clear();
     my_status_ = status;
 }
 
@@ -99,6 +106,18 @@ void Process::set_playlist_file(string playlistfile) {
     playlist_file_ = playlistfile;
 }
 
+int Process::get_server_sockfd() {
+    return server_sockfd_;
+}
+
+void Process::set_server_sockfd(int socket_fd) {
+    server_sockfd_ = socket_fd;
+}
+
+void Process::Close_server_sockfd() {
+    close(server_sockfd_) ;
+}
+
 // TODO: remember to set _fd_ to -1 on connection close
 // saves socket fd for connection from a send port
 void Process::set_fd(int process_id, int new_fd) {
@@ -108,6 +127,24 @@ void Process::set_fd(int process_id, int new_fd) {
         fd_[process_id] = new_fd;
     }
     pthread_mutex_unlock(&fd_lock);
+}
+
+void Process::reset_fd(int process_id) {
+    pthread_mutex_lock(&fd_lock);
+    fd_[process_id] = -1;
+    pthread_mutex_unlock(&fd_lock);
+}
+
+void Process::reset_alive_fd(int process_id) {
+    pthread_mutex_lock(&alive_fd_lock);
+    alive_fd_[process_id] = -1;
+    pthread_mutex_unlock(&alive_fd_lock);
+}
+
+void Process::reset_sdr_fd(int process_id) {
+    pthread_mutex_lock(&sdr_fd_lock);
+    sdr_fd_[process_id] = -1;
+    pthread_mutex_unlock(&sdr_fd_lock);
 }
 
 // TODO: remember to set fd_ to -1 on connection close
@@ -441,6 +478,8 @@ void Process::LoadTransactionId()
 {
     if (!log_.empty())
         transaction_id_ = log_.rbegin()->first;
+    // cout<<transaction_id_<<endl;}
+
     else
         cout << "Error. Log empty" << endl;
 }
@@ -512,32 +551,14 @@ void Process::LoadParticipants()
 
     participants_.clear();
 
-    if (CheckCoordinator())
+    vector<string> rv = split(tokens[2], ',');
+    for (vector<string>::iterator it = rv.begin(); it < rv.end(); it++)
     {
-        if (tokens[0] == "start")
-        {
-            vector<string> rv = split(tokens[1], ',');
-
-            for (vector<string>::iterator it = rv.begin(); it < rv.end(); it++)
-            {
-                participants_.insert(atoi((*it).c_str()));
-            }
-        }
+        participants_.insert(atoi((*it).c_str()));
     }
 
-    else
-    {
-        if (tokens[0] == "votereq")
-        {
-            vector<string> rv = split(tokens[2], ',');
-            for (vector<string>::iterator it = rv.begin(); it < rv.end(); it++)
-            {
-                participants_.insert(atoi((*it).c_str()));
-            }
+    participants_.insert(atoi(tokens[1].c_str()));
 
-            participants_.insert(atoi(tokens[1].c_str()));
-        }
-    }
 
 }
 
@@ -555,12 +576,59 @@ int Process::GetCoordinator()
         }
     }
 }
+
 //sets my_state_ accd to log and calls termination protocol
 void Process::Recovery()
 {
     LoadLogAndPrevDecisions();
+
     LoadTransactionId();
     LoadParticipants();
+    LoadUp();
+    cout << "Transaction id: " << transaction_id_ << endl;
+    cout << "Up set: ";
+    for (auto const &p : up_) {
+        cout << p << " ";
+    }
+    cout << endl;
+    cout << "Participants: ";
+    for (auto const &p : participants_) {
+        cout << p << " ";
+    }
+    cout << endl;
+
+    for (auto const &p : participants_) {
+        if (p == get_pid()) continue;
+        if (ConnectToProcess(p)) {
+            if (ConnectToProcessAlive(p)) {
+                ConnectToProcessSDR(p);
+            } else {
+                //TODO: I don't think we need to do anything special
+                // apart from not adding participant_[i] to the upset.
+                cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << p << endl;
+            }
+        } else {
+            //TODO: I don't think we need to do anything special
+            // apart from not adding participant_[i] to the upset.
+            cout << "P" << get_pid() << ": Unable to connect to P" << p << endl;
+        }
+    }
+
+    pthread_t send_alive_thread;
+    vector<pthread_t> receive_alive_threads(up_.size());
+    CreateAliveThreads(receive_alive_threads, send_alive_thread);
+
+    // one sdr receive thread for each participant, not just those in up_
+    // because any participant could ask for Dec Req in future.
+    // size = participant_.size()-1 because it contains self
+    vector<pthread_t> sdr_receive_threads(participants_.size() - 1);
+    int i = 0;
+    for (auto it = participants_.begin(); it != participants_.end(); ++it) {
+        //make sure you don't create a SDR receive thread for self
+        if (*it == get_pid()) continue;
+        CreateSDRThread(*it, sdr_receive_threads[i]);
+        i++;
+    }
 
     string decision = GetDecision();
 
@@ -618,15 +686,15 @@ void Process::DecisionRequest()
 }
 
 void Process::WaitForDecisionResponse() {
-    int n = participant_state_map_.size();
+    int n = participants_.size();
     std::vector<pthread_t> receive_thread(n);
 
     ReceiveDecThreadArgument **rcv_thread_arg = new ReceiveDecThreadArgument*[n];
     int i = 0;
-    for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
+    for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
         rcv_thread_arg[i] = new ReceiveDecThreadArgument;
         rcv_thread_arg[i]->p = this;
-        rcv_thread_arg[i]->pid = it->first;
+        rcv_thread_arg[i]->pid = *it;
         rcv_thread_arg[i]->transaction_id = transaction_id_;
         // rcv_thread_arg[i]->decision;
 
@@ -667,7 +735,7 @@ void* ReceiveDecision(void* _rcv_thread_arg)
 
     fd_set temp_set;
     FD_ZERO(&temp_set);
-    FD_SET(p->get_sdr_fd(pid), &temp_set);
+    FD_SET(p->get_fd(pid), &temp_set);
     int fd_max = p->get_fd(pid);
     int rv;
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
@@ -711,9 +779,9 @@ void Process::SendDecReqToAll(const string &msg) {
 
     //this only contains operational processes for non timeout cases
     for ( auto it = participants_.begin(); it != participants_.end(); ++it ) {
-        // if ((it->first) == get_pid()) continue; // do not send to self
+        if ((*it) == get_pid()) continue; // do not send to self
         if (send(get_sdr_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending to P" << (*it) << endl;
+            cout << "P" << get_pid() << ": ERROR1: sending to P" << (*it) << endl;
             RemoveFromUpSet(*it);
         }
         else {
@@ -868,7 +936,8 @@ void Process::LogStart()
 {
     string s = "start";
     s += " ";
-
+    s += to_string(pid_);
+    s += " ";
     // for (const auto& ps : participant_state_map_) {
     //     if(&ps!=participant_state_map_.begin())
     //         s+=",";
@@ -931,12 +1000,13 @@ void Process::SendDecision(int recp)
         code_to_send = ABORT;
     string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    // cout << get_fd(recp) << " " << recp << endl;
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+        cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << endl;
         RemoveFromUpSet(recp);
     }
     else {
-        cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
+        cout << "P" << get_pid() << ": decision Msg sent to P" << recp << ": " << msg << endl;
     }
 }
 

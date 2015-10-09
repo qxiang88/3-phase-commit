@@ -127,7 +127,7 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
 void Process::SendMsgToCoordinator(const string &msg_to_send) {
     string msg;
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    if(my_coordinator_==INT_MAX)
+    if (my_coordinator_ == INT_MAX)
         return;
     if (send(get_fd(my_coordinator_), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << my_coordinator_ << endl;
@@ -288,7 +288,7 @@ void Process::ReceiveCommitFromCoordinator() {
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << get_pid() << ": Msg received from P" << pid << ": " << buf <<  "at "<<time(NULL)%100<<endl;
+            cout << "P" << get_pid() << ": Msg received from P" << pid << ": " << buf <<  "at " << time(NULL) % 100 << endl;
 
             string extracted_msg;
             int received_tid;
@@ -382,6 +382,7 @@ void Process::ParticipantMode() {
 
     //else
     LogVoteReq();
+    LogUp();
     Vote(transaction_msg);
 
     if (my_state_ ==  ABORTED)

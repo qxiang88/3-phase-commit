@@ -15,6 +15,8 @@ public:
     void WaitForThreadJoins();
     bool CreateProcesses();
     void CreateTransactions();
+    bool ResurrectProcess(int process_id);
+
 
 
     void set_coordinator(int coordinator_id);

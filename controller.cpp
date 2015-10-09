@@ -79,7 +79,7 @@ bool Controller::ReadConfigFile() {
     temp.open("configs/count");
     temp >> count;
     temp.close();
-
+    cout<<"Using config: count "<<count<<endl;
     ofstream tempw;
     tempw.open("configs/count");
     tempw << (count + 1) % 5;
@@ -142,6 +142,18 @@ bool Controller::CreateProcesses() {
     return true;
 }
 
+bool Controller::ResurrectProcess(int process_id) {
+    process_[process_id].Initialize(process_id,
+                           kLogFile + to_string(process_id),
+                           kPlaylistFile + to_string(process_id),
+                           RECOVERY);
+    if (pthread_create(&process_thread_[process_id], NULL, ThreadEntry, (void *)&process_[process_id])) {
+        cout << "C: ERROR: Unable to create thread for P" << process_id << endl;
+        return false;
+    }
+    return true;
+}
+
 void Controller::WaitForThreadJoins() {
     void *status;
     for (int i = 0; i < N; i++) {
@@ -167,6 +179,7 @@ string Controller::get_transaction(int transaction_id) {
 }
 
 // closes all FDs opened by the process
+// closes server_sockfd
 // sets process' my_status_ to FAILED
 // cancels all threads created by the process
 // then, cancels the thread_entry thread for that process
@@ -174,9 +187,11 @@ void Controller::KillProcess(int process_id) {
     process_[process_id].CloseFDs();
     process_[process_id].CloseSDRFDs();
     process_[process_id].CloseAliveFDs();
+    process_[process_id].Close_server_sockfd();
     process_[process_id].set_my_status(FAILED);
     for (const auto &th : process_[process_id].thread_set) {
         pthread_cancel(th);
+
     }
     pthread_cancel(process_thread_[process_id]);
 
@@ -196,12 +211,14 @@ int main() {
     if (!c.ReadConfigFile()) return 1;
     c.CreateTransactions();
     if (!c.CreateProcesses()) return 1;
-    // sleep(4);
-    // c.KillProcess(0);
+    sleep(4);
+    c.KillProcess(0);
     // sleep(4);
     // c.KillProcess(1);
     // sleep(4);
     // c.KillProcess(2);
+    sleep(4);
+    if (!c.ResurrectProcess(0)) return 1;
     c.WaitForThreadJoins();
 
     // int t=0
