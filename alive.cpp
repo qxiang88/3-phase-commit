@@ -26,8 +26,8 @@ void Process::RemoveFromUpSet(int k) {
         log = true;
     }
     pthread_mutex_unlock(&up_lock);
-    if (k == my_coordinator_) {
-        my_coordinator_ = INT_MAX;
+    if (k == get_my_coordinator()) {
+        set_my_coordinator(INT_MAX);
     }
     if (log)
         LogUp();
@@ -179,7 +179,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
             else
             {
                 buf[num_bytes] = '\0';
-                // cout << "P" << p->get_pid() << ": ALIVE received from P" << pid << ": "  << buf << " at " << time(NULL) % 100 <<  endl;
+                outf << "P" << p->get_pid() << ": ALIVE received from P" << pid << ": "  << buf << " at " << time(NULL) % 100 <<  endl;
 
                 string bufstring(buf);
 
@@ -242,12 +242,12 @@ void* SendAlive(void *_p) {
                 //     //TODO: Hopefully, receive will timeout soon
                 //     // and will remove it from UP set
                 // } else {
-                cout << "P" << p->get_pid() << ": ERROR: sending ALIVE to P" << (*it) << endl;
+                // cout << "P" << p->get_pid() << ": ERROR: sending ALIVE to P" << (*it) << endl;
                 it++;
                 // }
             }
             else {
-                // cout << "P" << p->get_pid() << ": ALIVE sent to P" << (*it) << " at " << time(NULL) % 100 << endl;
+                outf << "P" << p->get_pid() << ": ALIVE sent to P" << (*it) << " at " << time(NULL) % 100 << endl;
                 it++;
             }
         }

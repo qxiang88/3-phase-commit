@@ -20,10 +20,10 @@ const time_t kGeneralSleep = 2000 * 1000;
 const time_t kTransactionSleep = 100000 * 1000;
 const time_t kMiniSleep = 50 * 1000;
 
-const time_t kSendAliveInterval = 2000 * 1000;  // MUST be less than the kTimeout, preferably at least 1 sec less
+const time_t kSendAliveInterval = 1000 * 1000;  // MUST be less than the kTimeout, preferably at least 1 sec less
 // const time_t kAliveTimeout = 900*1000;
 const time_t kDecReqTimeout = 1000 * 1000;
-const time_t kReceiveAliveTimeout = 2000*1000;   // slightly less than sendAliveInterval to avoid race conditions
+const time_t kReceiveAliveTimeout = 1000*1000;   // slightly less than sendAliveInterval to avoid race conditions
 
 
 // timeout for select call (receive timeout)

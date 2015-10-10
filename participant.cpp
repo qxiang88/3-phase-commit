@@ -27,7 +27,7 @@ bool Process::ExtractFromVoteReq(const string &msg, string &transaction_msg ) {
         ret = true;
     } else  { // it's something else
         //TODO: take actions appropriately, like check log for previous transaction decision.
-        cout << "P" << get_pid() << ": Unexpected msg received from P" << my_coordinator_ << endl;
+        cout << "P" << get_pid() << ": Unexpected msg received from P" << get_my_coordinator() << endl;
         ret = false;
     }
 
@@ -75,7 +75,7 @@ bool Process::ExtractFromVoteReq(const string &msg, string &transaction_msg ) {
 // populates participants_ vector
 // DOES NOT populate up_ vector
 bool Process::WaitForVoteReq(string &transaction_msg) {
-    int pid = my_coordinator_;
+    int pid = get_my_coordinator();
     bool ret;
     char buf[kMaxDataSize];
     int num_bytes;
@@ -127,14 +127,15 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
 void Process::SendMsgToCoordinator(const string &msg_to_send) {
     string msg;
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    if (my_coordinator_ == INT_MAX)
+    int mc = get_my_coordinator();
+    if (mc == INT_MAX)
         return;
-    if (send(get_fd(my_coordinator_), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << my_coordinator_ << endl;
+    if (send(get_fd(mc), msg.c_str(), msg.size(), 0) == -1) {
+        cout << "P" << get_pid() << ": ERROR: sending to P" << mc << endl;
         RemoveFromUpSet(my_coordinator_);
     }
     else {
-        cout << "P" << get_pid() << ": Msg sent to P" << my_coordinator_ << ": " << msg << endl;
+        cout << "P" << get_pid() << ": Msg sent to P" << mc << ": " << msg << endl;
     }
 }
 
@@ -142,7 +143,7 @@ void Process::SendMsgToCoordinator(const string &msg_to_send) {
 // on receipt, updates my_state_ variable
 // on timeout, initiates termination protocol
 void Process::ReceivePreCommitOrAbortFromCoordinator() {
-    int pid = my_coordinator_;
+    int pid = get_my_coordinator();
     char buf[kMaxDataSize];
     int num_bytes;
     //TODO: write code to extract multiple messages
@@ -199,7 +200,7 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
 // on receipt, updates my_state_ variable
 // on timeout, initiates termination protocol
 void Process::ReceiveAnythingFromCoordinator() {
-    int pid = my_coordinator_;
+    int pid = get_my_coordinator();
     char buf[kMaxDataSize];
     int num_bytes;
     //TODO: write code to extract multiple messages
@@ -257,7 +258,7 @@ void Process::ReceiveAnythingFromCoordinator() {
 // Waits for COMMIT from coordinator
 // on timeout, initiates termination protocol
 void Process::ReceiveCommitFromCoordinator() {
-    int pid = my_coordinator_;
+    int pid = get_my_coordinator();
     char buf[kMaxDataSize];
     int num_bytes;
     //TODO: write code to extract multiple messages
@@ -310,7 +311,7 @@ void Process::ReceiveCommitFromCoordinator() {
 // ALIVE connect to each process in participants_ list
 // adds them to the UP set.
 void Process::ConstructUpSet() {
-    up_.insert(my_coordinator_);
+    up_.insert(get_my_coordinator());
     for (auto const &p : participants_) {
         if (p == get_pid()) continue;
         // cout<<p<<endl;
@@ -368,7 +369,7 @@ void Process::ParticipantMode() {
             i++;
         }
 
-        CreateSDRThread(my_coordinator_, sdr_receive_threads[i]);
+        CreateSDRThread(get_my_coordinator(), sdr_receive_threads[i]);
 
 
         // vector<pthread_t> sdr_receive_thread;
@@ -411,7 +412,7 @@ void Process::ParticipantMode() {
             }
             else
             {
-                RemoveFromUpSet(my_coordinator_);
+                RemoveFromUpSet(get_my_coordinator());
                 Timeout();
 
             }
@@ -424,7 +425,7 @@ void Process::ParticipantMode() {
 
         else
         {
-            RemoveFromUpSet(my_coordinator_);
+            RemoveFromUpSet(get_my_coordinator());
             Timeout();
             // Print();
 

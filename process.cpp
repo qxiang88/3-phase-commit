@@ -19,6 +19,9 @@ pthread_mutex_t sdr_fd_lock;
 ReceivedMsgType received_msg_type;
 pthread_mutex_t log_lock;
 pthread_mutex_t new_coord_lock;
+pthread_mutex_t state_req_lock;
+pthread_mutex_t my_coord_lock;
+
 
 void Process::ThreeWayHandshake() {
     while (get_handshake() != EXPECTING) {
@@ -96,7 +99,7 @@ void Process::Initialize(int pid,
     pid_ = pid;
     log_file_ = log_file;
     playlist_file_ = playlist_file;
-    my_coordinator_ = coord_id;
+    set_my_coordinator(coord_id);
     my_status_ = status;
 
     log_.clear();
@@ -123,7 +126,7 @@ void Process::Initialize(int pid,
 }
 
 void Process::Reset(int coord_id) {
-    my_coordinator_ = coord_id;
+    set_my_coordinator(coord_id);
 
     log_.clear();
     up_.clear();
@@ -220,7 +223,10 @@ void Process::set_alive_fd(int process_id, int new_fd) {
 }
 
 void Process::set_my_coordinator(int process_id) {
+    pthread_mutex_lock(&my_coord_lock);
     my_coordinator_ = process_id;
+    pthread_mutex_unlock(&my_coord_lock);
+
     set_coordinator(process_id);
 }
 
@@ -281,7 +287,11 @@ void Process::set_my_state(ProcessState state)
 
 int Process::get_my_coordinator()
 {
-    return my_coordinator_;
+    int mc;
+    pthread_mutex_lock(&my_coord_lock);
+    mc = my_coordinator_;
+    pthread_mutex_unlock(&my_coord_lock);
+    return mc;
 }
 
 //TODO: handshake lock
@@ -439,6 +449,11 @@ void Process::InitializeLocks() {
     }
 
     if (pthread_mutex_init(&new_coord_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+
+    if (pthread_mutex_init(&my_coord_lock, NULL) != 0) {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
         pthread_exit(NULL);
     }
@@ -658,6 +673,9 @@ void Process::Recovery()
     LoadLogAndPrevDecisions();
 
     LoadTransactionId();
+    if(transaction_id_==-1)
+        return;
+
     LoadParticipants();
     LoadUp();
     cout << "Transaction id: " << transaction_id_ << endl;
@@ -732,6 +750,7 @@ void Process::Recovery()
         else if (vote.empty())
         {
             my_state_ = ABORTED;
+            LogAbort();
         }
     }
 }
@@ -883,7 +902,7 @@ void Process::TerminationProtocol()
     // else if(my_coordinator_==2)
     //     cout << "P" << pid_ << ": my new coordinator=two"<< endl;
 
-    if (pid_ == my_coordinator_)
+    if (pid_ == get_my_coordinator())
     {   //coord case
         //pass on arg saying total failue, then send to all
         void* status;
@@ -906,10 +925,20 @@ void Process::TerminationProtocol()
     }
     else
     {
+        pthread_mutex_lock(&state_req_lock);
         state_req_in_progress = false;
-        SendURElected(my_coordinator_);
+        pthread_mutex_unlock(&state_req_lock);
+
+        SendURElected(get_my_coordinator());
         usleep(kGeneralTimeout);
-        if (state_req_in_progress)
+        
+        bool temp_sr = false;
+        
+        pthread_mutex_lock(&state_req_lock);
+        temp_sr = state_req_in_progress;
+        pthread_mutex_unlock(&state_req_lock);
+
+        if (temp_sr)
             return;
         TerminationProtocol();
 
@@ -927,7 +956,9 @@ void Process::TerminationProtocol()
 }
 void Process::set_state_req_in_progress(bool val)
 {
+    pthread_mutex_lock(&state_req_lock);
     state_req_in_progress = val;
+    pthread_mutex_unlock(&state_req_lock);
 }
 
 void Process::ElectionProtocol()
@@ -1006,7 +1037,7 @@ void Process::LogVoteReq()
 
     string s = "votereq";
     s += " ";
-    s += to_string(my_coordinator_);
+    s += to_string(get_my_coordinator());
     s += " ";
 
     // for(int i=0; i<participants_.size(); i++)
@@ -1065,7 +1096,7 @@ void Process::SendState(int recp)
     string msg;
     string msg_to_send = to_string((int)my_state_);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-
+    cout<<"trying to send st to "<<recp<<endl;
     if (recp == INT_MAX)
         return;
 

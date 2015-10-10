@@ -132,7 +132,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
         // TODO: confirm whether this is the right amount of sleep
         if ((num_bytes = recv(p->get_sdr_fd(pid), buf, kMaxDataSize - 1, 0)) == -1)
         {
-            // cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << endl;
+            cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << endl;
             p->RemoveFromUpSet(pid);
             // no need to exit even if there is an error. Hopefully in future, pid will recover
             // and SDRconnect to this process which will set the sdr_fd correctly
@@ -154,10 +154,12 @@ void* ReceiveStateOrDecReq(void* _arg) {
             buffer_data = string(buf);
             p->ExtractMsg(buffer_data, type_req, recvd_tid);
             outf << "P" << p->get_pid() << ": SDR recevd from P" << pid << ": " << buf <<  endl;
+
+            int my_coord = p->get_my_coordinator();
             if (type_req == kStateReq)
             {   //assumes state req has to be current tid
 
-                if (p->get_my_coordinator() == p->get_pid())
+                if (my_coord == p->get_pid())
                 {
                     //i am coordinator and have received state req
                     if (pid < (p->get_pid()))
@@ -176,10 +178,12 @@ void* ReceiveStateOrDecReq(void* _arg) {
                 }
                 else //i am participant
                 {
-                    if (pid <= (p->get_my_coordinator()))
+
+                    cout<<pid<<" "<<my_coord<<endl;
+                    if (pid <= (my_coord))
                     {   //only send to valid coord
                         p->set_state_req_in_progress(true);
-                        if (pid < (p->get_my_coordinator()))
+                        if (pid < (my_coord))
                             p->set_my_coordinator(pid);
 
                         pthread_cancel(sr_response_thread);
@@ -193,8 +197,13 @@ void* ReceiveStateOrDecReq(void* _arg) {
             }
             else if (type_req == kURElected)
             {
-                if (p->get_my_coordinator() == p->get_pid())
+                cout<<"I am elected. my coord was "<<my_coord<<", my id is "<<p->get_pid()<<endl;
+                if (my_coord == p->get_pid())
                     continue;
+                if(my_coord<pid)
+                    continue;
+
+
 
                 bool templ = false;
                 pthread_mutex_lock(&new_coord_lock);

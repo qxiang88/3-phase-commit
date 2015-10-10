@@ -381,6 +381,7 @@ void* ReceiveStateFromParticipant(void* _rcv_thread_arg) {
     } else {    // activity happened on the socket
         if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
+            rcv_thread_arg->st = PROCESSTIMEOUT;
             p->RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
             cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
@@ -479,7 +480,11 @@ void Process::CoordinatorMode() {
 
     CreateAliveThreads(receive_alive_threads, send_alive_thread);
     WaitForVotes();
+
+    
     return;
+    
+
     string trans = get_transaction(transaction_id_);
     //TODO: Handle case when trans = "NULL". See also ConstructVoteReq same cases
     Vote(trans); //coordinator's self vote
@@ -600,6 +605,7 @@ void* NewCoordinatorMode(void * _p) {
 
     bool uncert = true;
     for (const auto& ps : p->participant_state_map_) {
+        if(ps.second==PROCESSTIMEOUT)continue;
         if (ps.second != UNCERTAIN)
         {
             uncert = false;
