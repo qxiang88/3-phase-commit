@@ -133,7 +133,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
         // cout<<"$$$$P"<<p->get_pid()<<"sdr_fd"<<pid<<p->get_sdr_fd(pid)<<endl;
         if ((num_bytes = recv(p->get_sdr_fd(pid), buf, kMaxDataSize - 1, 0)) == -1)
         {
-            cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << endl;
             p->RemoveFromUpSet(pid);
             // no need to exit even if there is an error. Hopefully in future, pid will recover
             // and SDRconnect to this process which will set the sdr_fd correctly
@@ -180,7 +180,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
                 else //i am participant
                 {
 
-                    cout<<pid<<" "<<my_coord<<endl;
+                    // cout<<pid<<" "<<my_coord<<endl;
                     if (pid <= (my_coord))
                     {   //only send to valid coord
                         p->set_state_req_in_progress(true);
@@ -221,7 +221,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
 
             }
             else { //decreq
-                outf << "Dec req received " << p->get_my_state() << endl;
+                cout << "Dec req received " << p->get_my_state() << endl;
                 if (recvd_tid == p->get_transaction_id())
                 {
                     if (p->get_my_state() == COMMITTED || p->get_my_state() == ABORTED)
