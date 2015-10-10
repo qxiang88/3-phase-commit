@@ -36,8 +36,7 @@ void sigchld_handler(int s) {
 // this connection is corresponding to the send connection
 bool Process::ConnectToProcess(int process_id) {
     if (get_fd(process_id) != -1) return true;
-    cout << get_pid() << "to" << process_id<<"for"<<get_fd(process_id);
-    cout<<"do"<<endl;
+    // cout << get_pid() << "to" << process_id<<"for"<<get_fd(process_id);
     int sockfd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *clientinfo, *l;
 

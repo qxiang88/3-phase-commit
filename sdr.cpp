@@ -130,6 +130,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
     while (true) {
         // currently, this loop sleeps at the end for kGeneralSleep
         // TODO: confirm whether this is the right amount of sleep
+        // cout<<"$$$$P"<<p->get_pid()<<"sdr_fd"<<pid<<p->get_sdr_fd(pid)<<endl;
         if ((num_bytes = recv(p->get_sdr_fd(pid), buf, kMaxDataSize - 1, 0)) == -1)
         {
             cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << endl;

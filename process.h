@@ -26,6 +26,9 @@ extern void sigchld_handler(int s);
 extern vector<string> split(string s, char delimiter);
 extern void PrintUpSet(int, unordered_set<int>);
 
+struct ReceiveSDRThreadArgument;
+struct ReceiveAliveThreadArgument;
+
 typedef enum
 {
     UNINITIALIZED, ABORTED, UNCERTAIN, COMMITTABLE, COMMITTED, PROCESSTIMEOUT
@@ -195,6 +198,9 @@ public:
     // set of all threads created by a process
     std::unordered_set<pthread_t> thread_set;
     bool new_coord_thread_made;
+
+    vector<ReceiveAliveThreadArgument*> rcv_alive_thread_arg;
+    ReceiveSDRThreadArgument *rcv_sdr_thread_arg;
 
 private:
     int pid_;

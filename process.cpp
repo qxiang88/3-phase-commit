@@ -475,14 +475,17 @@ void Process::CreateAliveThreads(vector<pthread_t> &receive_alive_threads, pthre
 
     int n = up_.size();
     //
+    rcv_alive_thread_arg.clear();
+    rcv_alive_thread_arg.resize(n);
 
-    ReceiveAliveThreadArgument **rcv_thread_arg = new ReceiveAliveThreadArgument*[n];
+    // ReceiveAliveThreadArgument **rcv_thread_arg = new ReceiveAliveThreadArgument*[n];
+
     int i = 0;
     for (auto it = up_.begin(); it != up_.end(); ++it ) {
-        rcv_thread_arg[i] = new ReceiveAliveThreadArgument;
-        rcv_thread_arg[i]->p = this;
-        rcv_thread_arg[i]->pid_from_whom = *it;
-        CreateThread(receive_alive_threads[i], ReceiveAlive, (void *)rcv_thread_arg[i]);
+        rcv_alive_thread_arg[i] = new ReceiveAliveThreadArgument;
+        rcv_alive_thread_arg[i]->p = this;
+        rcv_alive_thread_arg[i]->pid_from_whom = *it;
+        CreateThread(receive_alive_threads[i], ReceiveAlive, (void *)rcv_alive_thread_arg[i]);
         i++;
     }
     // CreateThread(receive_alive_thread, ReceiveAlive, (void *)this);
@@ -490,10 +493,10 @@ void Process::CreateAliveThreads(vector<pthread_t> &receive_alive_threads, pthre
 }
 
 void Process::CreateSDRThread(int process_id, pthread_t &sdr_receive_thread) {
-    ReceiveSDRThreadArgument *rcv_thread_arg = new ReceiveSDRThreadArgument;
-    rcv_thread_arg-> p = this;
-    rcv_thread_arg->pid_to_whom = process_id;
-    CreateThread(sdr_receive_thread, ReceiveStateOrDecReq, (void *)rcv_thread_arg);
+    rcv_sdr_thread_arg = new ReceiveSDRThreadArgument;
+    rcv_sdr_thread_arg-> p = this;
+    rcv_sdr_thread_arg->pid_to_whom = process_id;
+    CreateThread(sdr_receive_thread, ReceiveStateOrDecReq, (void *)rcv_sdr_thread_arg);
 }
 
 void Process::AddToLog(string s, bool new_round)
