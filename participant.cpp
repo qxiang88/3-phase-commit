@@ -91,7 +91,7 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
         // pthread_exit(NULL);
     } else if (rv == 0) {   //timeout
-        // cout<<"TIMEOUT"<<endl;
+        cout<<"TIMEOUT"<<endl;
         my_state_ = ABORTED;
         RemoveFromUpSet(pid);
 
@@ -314,6 +314,7 @@ void Process::ConstructUpSet() {
     for (auto const &p : participants_) {
         if (p == get_pid()) continue;
         // cout<<p<<endl;
+        // ConnectToProcess(p);
         if (ConnectToProcessAlive(p)) {
             ConnectToProcessSDR(p);
             up_.insert(p);
@@ -332,7 +333,7 @@ void Process::ParticipantMode() {
     //create SR thread here
 
     //TODO: find a better way to set coordinator
-    set_my_coordinator(0);
+    // set_my_coordinator(0);
 
     // connect to coordinator
     // if (!ConnectToProcess(my_coordinator_)) {
@@ -349,7 +350,7 @@ void Process::ParticipantMode() {
         // TODO: check if special actions required
     } else { // VOTE-REQ received.
         ConstructUpSet();
-
+        
         pthread_t send_alive_thread;
         vector<pthread_t> receive_alive_threads(up_.size());
         CreateAliveThreads(receive_alive_threads, send_alive_thread);
@@ -384,6 +385,7 @@ void Process::ParticipantMode() {
     LogVoteReq();
     LogUp();
     Vote(transaction_msg);
+            // Print();
 
     if (my_state_ ==  ABORTED)
     {   //participant's vote was NO
@@ -424,6 +426,7 @@ void Process::ParticipantMode() {
         {
             RemoveFromUpSet(my_coordinator_);
             Timeout();
+            // Print();
 
         }
         // TODO: might need to check other values of my_state_

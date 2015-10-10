@@ -419,33 +419,38 @@ void* ReceiveStateFromParticipant(void* _rcv_thread_arg) {
     return NULL;
 }
 
+void Process::WaitForInit3PC() {
+    while (get_handshake() != INIT3PC) {
+        usleep(kMiniSleep);
+    }
+}
 // Function for a process which behaves as a normal coordinator
 // normal coordinator means one who has been elected by the Controller
 // and not suffered any failure
 // or the result of an election protocol
 void Process::CoordinatorMode() {
     //TODO: find a better way to set coordinator
-    set_my_coordinator(0);
-
+    // set_my_coordinator(0);
+    WaitForInit3PC();
     //TODO: handle transaction IDs
     //TODO: increment it
     //TODO: send it to ConstructVoteReq;
 
-    // connect to each participant
-    for (int i = 0; i < N; ++i) {
-        if (i == get_pid()) continue;
-        if (ConnectToProcess(i)) {
-            participant_state_map_.insert(make_pair(i, UNINITIALIZED));
+    for (const auto &pm: participant_state_map_) {
+        if (pm.first == get_pid()) continue;
+        if (ConnectToProcess(pm.first)) {
             // setup alive connection to this process
-            if (ConnectToProcessAlive(i)) {
-                ConnectToProcessSDR(i);
-                up_.insert(i);
+            if (ConnectToProcessAlive(pm.first)) {
+                ConnectToProcessSDR(pm.first);
+                up_.insert(pm.first);
             } else {
                 // Practically, this should not happen, since it just connected to i.
                 // TODO: not handling this rare case presently
                 // this causes up_ to deviate from participant_state_map_ at the beginning
-                cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << i << endl;
+                cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << pm.first << endl;
             }
+        } else {
+                cout << "P" << get_pid() << ": Unable to connect to P" << pm.first << endl;
         }
     }
     usleep(kGeneralSleep); //sleep to make sure connections are established
@@ -472,9 +477,9 @@ void Process::CoordinatorMode() {
     LogStart();
     LogUp();
 
-
     CreateAliveThreads(receive_alive_threads, send_alive_thread);
     WaitForVotes();
+    return;
     string trans = get_transaction(transaction_id_);
     //TODO: Handle case when trans = "NULL". See also ConstructVoteReq same cases
     Vote(trans); //coordinator's self vote
@@ -505,7 +510,6 @@ void Process::CoordinatorMode() {
     } else {
 
         LogPreCommit();
-        return;
         SendPreCommitToAll();
         WaitForAck();
         LogCommit();
@@ -534,7 +538,7 @@ void* NewCoordinatorMode(void * _p) {
         if (p->ConnectToProcess(*it))
             p->participant_state_map_.insert(make_pair(*it, UNINITIALIZED));
     }
-
+    // return NULL;
     string msg;
     p->ConstructStateReq(msg);
 
@@ -542,7 +546,7 @@ void* NewCoordinatorMode(void * _p) {
     outf << "sent state req" << endl;
     p->WaitForStates();
     ProcessState my_st = p->get_my_state();
-    
+
     // if(p->get_pid() == 1) return NULL;
 
     bool aborted = false;
@@ -616,7 +620,7 @@ void* NewCoordinatorMode(void * _p) {
     //else
     //some are commitable
     p->LogPreCommit();
-    outf<<"sending precommit at "<<time(NULL)%100<<endl;
+    outf << "sending precommit at " << time(NULL) % 100 << endl;
     for (const auto& ps : p->participant_state_map_) {
         p->SendPreCommitToProcess(ps.first);
     }

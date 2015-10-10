@@ -18,7 +18,15 @@ pthread_mutex_t alive_fd_lock;
 pthread_mutex_t sdr_fd_lock;
 ReceivedMsgType received_msg_type;
 pthread_mutex_t log_lock;
+pthread_mutex_t new_coord_lock;
 
+void Process::ThreeWayHandshake() {
+    while (get_handshake() != EXPECTING) {
+        usleep(kMiniSleep);
+    }
+
+    set_handshake(READY);
+}
 // entry function for a process created normally by the controller
 // normally means it is the first time this process has been spawned
 // no need to read log
@@ -40,27 +48,38 @@ void* ThreadEntry(void* _p) {
     // sleep to make sure server is up and listening
     // usleep(kGeneralSleep);
 
-    // if my_status_ is RUNNING, process enters normal modes
-    if (p->get_my_status() == RUNNING) {
-        // if pid=0, then it is the coordinator
-        //TODO: find a better way to set coordinator
-        if (p->get_pid() == 0) {
-            p->CoordinatorMode();
-            cout << "P" << p->get_pid() << ": Coordinator mode over" << endl;
+    while (true) {
+        int status = p->get_my_status();
+        if (status == RECOVERY) {
+            cout << "Resurrecting process " << p->get_pid() << endl;
+            p->Recovery();
             p->set_my_status(DONE);
-        } else {
-            p->ParticipantMode();
-            cout << "P" << p->get_pid() << ": Participant mode over" << endl;
-            p->set_my_status(DONE);
+            cout << "P" << p->get_pid() << ": Recovery mode over" << endl;
         }
-    } else if (p->get_my_status() == RECOVERY) {
-        cout << "Resurrecting process " << p->get_pid() << endl;
-        p->Recovery();
-        p->set_my_status(DONE);
-        cout << "P" << p->get_pid() << ": Recovery mode over" << endl;
-    } else {
-        cout << "P" << p->get_pid() << ": Unexpected Status" << endl;
-        //TODO: verify if process can enter ThreadEntry with any other runningstatus
+        else {
+            p->ThreeWayHandshake();
+            // cout<<"P"<<p->get_pid()<<p->get_my_status()<<endl;
+            // if my_status_ is DONE, it means it completed prev transaction
+            // so, it enters normal modes
+
+            if (status == DONE) {
+                // if pid=0, then it is the coordinator
+                p->set_my_status(RUNNING);
+
+                if (p->get_pid() == p->get_my_coordinator()) {
+                    p->CoordinatorMode();
+                    cout << "P" << p->get_pid() << ": Coordinator mode over" << endl;
+                    p->set_my_status(DONE);
+                } else {
+                    p->ParticipantMode();
+                    cout << "P" << p->get_pid() << ": Participant mode over" << endl;
+                    p->set_my_status(DONE);
+                }
+            } else {
+                cout << "P" << p->get_pid() << ": Unexpected Status" << p->get_my_status() << endl;
+                //TODO: verify if process can enter ThreadEntry with any other runningstatus
+            }
+        }
     }
 
     void* status;
@@ -69,25 +88,54 @@ void* ThreadEntry(void* _p) {
 }
 
 
-void Process::Initialize(int pid, string log_file, string playlist_file,
+void Process::Initialize(int pid,
+                         string log_file,
+                         string playlist_file,
+                         int coord_id,
                          ProcessRunningStatus status) {
     pid_ = pid;
     log_file_ = log_file;
     playlist_file_ = playlist_file;
+    my_coordinator_ = coord_id;
+    my_status_ = status;
+
     log_.clear();
     fd_.clear();
     alive_fd_.clear();
     sdr_fd_.clear();
-    process_state_.clear();
     thread_set.clear();
+    up_.clear();
+    participants_.clear();
+    participant_state_map_.clear();
+
 
     fd_.resize(N, -1);
     alive_fd_.resize(N, -1);
     sdr_fd_.resize(N, -1);
-    process_state_.resize(N, UNINITIALIZED);
+
+    transaction_id_ = -1;
     my_state_ = UNINITIALIZED;
-    transaction_id_ = 0;
-    my_status_ = status;
+    newcoord_thread = 0;
+    state_req_in_progress = false;
+    new_coord_thread_made = false;
+    server_sockfd_ = -1;
+    handshake_ = BLANK;
+}
+
+void Process::Reset(int coord_id) {
+    my_coordinator_ = coord_id;
+
+    log_.clear();
+    up_.clear();
+    participants_.clear();
+    participant_state_map_.clear();
+
+    transaction_id_ = -1;
+    my_state_ = UNINITIALIZED;
+    newcoord_thread = 0;
+    new_coord_thread_made = false;
+    state_req_in_progress = false;
+    handshake_ = BLANK;
 }
 
 int Process::get_pid() {
@@ -130,19 +178,23 @@ void Process::set_fd(int process_id, int new_fd) {
 }
 
 void Process::reset_fd(int process_id) {
+    // cout<<"P"<<get_pid()<<"reseting"<<process_id<<endl;
     pthread_mutex_lock(&fd_lock);
+    close(fd_[process_id]);
     fd_[process_id] = -1;
     pthread_mutex_unlock(&fd_lock);
 }
 
 void Process::reset_alive_fd(int process_id) {
     pthread_mutex_lock(&alive_fd_lock);
+    close(alive_fd_[process_id]);
     alive_fd_[process_id] = -1;
     pthread_mutex_unlock(&alive_fd_lock);
 }
 
 void Process::reset_sdr_fd(int process_id) {
     pthread_mutex_lock(&sdr_fd_lock);
+    close(sdr_fd_[process_id]);
     sdr_fd_[process_id] = -1;
     pthread_mutex_unlock(&sdr_fd_lock);
 }
@@ -170,6 +222,14 @@ void Process::set_alive_fd(int process_id, int new_fd) {
 void Process::set_my_coordinator(int process_id) {
     my_coordinator_ = process_id;
     set_coordinator(process_id);
+}
+
+void Process::set_transaction_id(int tid) {
+    transaction_id_ = tid;
+}
+
+int Process::get_transaction_id() {
+    return transaction_id_;
 }
 
 // get socket fd corresponding to process_id's send connection
@@ -223,6 +283,16 @@ int Process::get_my_coordinator()
 {
     return my_coordinator_;
 }
+
+//TODO: handshake lock
+void Process::set_handshake(Handshake hs) {
+    handshake_ = hs;
+}
+
+Handshake Process::get_handshake() {
+    return handshake_;
+}
+
 // print function for debugging purposes
 void Process::Print() {
     cout << "pid=" << get_pid() << " ";
@@ -364,6 +434,11 @@ void Process::InitializeLocks() {
     }
 
     if (pthread_mutex_init(&up_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+
+    if (pthread_mutex_init(&new_coord_lock, NULL) != 0) {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
         pthread_exit(NULL);
     }
@@ -798,7 +873,7 @@ void Process::TerminationProtocol()
     // state_req_in_progress = true;
     //sets new coord
     cout << "TerminationProtocol by" << get_pid() << " at " << time(NULL) % 100 << endl;
-    bool status = false;
+    // bool status = false;
     // while(!status){
     ElectionProtocol();
 
@@ -812,14 +887,27 @@ void Process::TerminationProtocol()
     {   //coord case
         //pass on arg saying total failue, then send to all
         void* status;
-        CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
-        pthread_join(newcoord_thread, &status);
-        RemoveThreadFromSet(newcoord_thread);
+        bool templ = false;
+        pthread_mutex_lock(&new_coord_lock);
+
+        if (!new_coord_thread_made)
+        {
+            new_coord_thread_made = true;
+            templ = true;
+        }
+
+        pthread_mutex_unlock(&new_coord_lock);
+        if (templ) {
+            CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
+            pthread_join(newcoord_thread, &status);
+            RemoveThreadFromSet(newcoord_thread);
+        }
+
     }
     else
     {
         state_req_in_progress = false;
-        status = SendURElected(my_coordinator_);
+        SendURElected(my_coordinator_);
         usleep(kGeneralTimeout);
         if (state_req_in_progress)
             return;
@@ -1023,11 +1111,6 @@ void Process::SendPrevDecision(int recp, int tid)
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
     }
-}
-
-int Process::get_transaction_id()
-{
-    return transaction_id_;
 }
 
 void Process::CloseFDs()

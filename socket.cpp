@@ -35,6 +35,9 @@ void sigchld_handler(int s) {
 // returns true if connection was successfull
 // this connection is corresponding to the send connection
 bool Process::ConnectToProcess(int process_id) {
+    if (get_fd(process_id) != -1) return true;
+    cout << get_pid() << "to" << process_id<<"for"<<get_fd(process_id);
+    cout<<"do"<<endl;
     int sockfd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *clientinfo, *l;
 
@@ -100,18 +103,19 @@ bool Process::ConnectToProcess(int process_id) {
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE; // use my IP
-
     if ((rv = getaddrinfo(NULL, std::to_string(get_listen_port(process_id)).c_str(),
                           &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return false;
     }
-
     // loop through all the results and connect to the first we can
     for (l = servinfo; l != NULL; l = l->ai_next)
     {
+        errno = 0;
         if (connect(sockfd, l->ai_addr, l->ai_addrlen) == -1) {
+            // cout << sockfd << endl;
             close(sockfd);
+            // if (errno == EBADF) cout << errno << endl;
             // cout << "P" << get_pid() << ": Client: connect ERROR\n";
             continue;
         }

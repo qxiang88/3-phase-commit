@@ -43,6 +43,7 @@ void Process::RemoveFromUpSet(int k) {
 // returns true if connection was successfull
 // this connection is corresponding to the alive connection
 bool Process::ConnectToProcessAlive(int process_id) {
+    if (get_alive_fd(process_id) != -1) return true;
     int sockfd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *clientinfo, *l;
 
@@ -178,7 +179,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
             else
             {
                 buf[num_bytes] = '\0';
-                outf << "P" << p->get_pid() << ": ALIVE received from P" << pid << ": "  << buf << " at " << time(NULL) % 100 <<  endl;
+                // cout << "P" << p->get_pid() << ": ALIVE received from P" << pid << ": "  << buf << " at " << time(NULL) % 100 <<  endl;
 
                 string bufstring(buf);
 
@@ -188,27 +189,22 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
                     buffered_alives.insert(*iter);
                 }
 
-                // cout<<p->get_pid()<<" looking for "<<alive_to_check<<" from "<<pid<<endl;
+                // cout << p->get_pid() << " looking for " << alive_to_check << " from " << pid << endl;
 
-                // for(auto xit = buffered_alives.begin(); xit!=buffered_alives.end(); xit++)
-                // cout<<*xit<<" ";
-                // cout<<endl;
+                // for (auto xit = buffered_alives.begin(); xit != buffered_alives.end(); xit++)
+                //     cout << *xit << " ";
+                // cout << endl;
 
-                // set<string>::iterator iter=buffered_alives.find(alive_to_check);
-                // if(iter!=buffered_alives.end())
-                // {
-
-                // }
-                //     // alive_processes.insert(pid);
-                // else
-                // {
-                //     cout<<"didnt find "<<alive_to_check<<" for "<<pid<<endl;
-                //     p->RemoveFromUpSet(pid);
-                //     pthread_mutex_lock(&up_lock);
-                //     unordered_set <int> copy_up(p->up_);
-                //     pthread_mutex_unlock(&up_lock);
-                //     PrintUpSet(p->get_pid(), copy_up);
-                // }
+                set<string>::iterator iter = buffered_alives.find(alive_to_check);
+                if (iter == buffered_alives.end())
+                {
+                    cout << "didnt find " << alive_to_check << " for " << pid << endl;
+                    p->RemoveFromUpSet(pid);
+                    pthread_mutex_lock(&up_lock);
+                    unordered_set <int> copy_up(p->up_);
+                    pthread_mutex_unlock(&up_lock);
+                    PrintUpSet(p->get_pid(), copy_up);
+                }
             }
         }
 
@@ -240,18 +236,18 @@ void* SendAlive(void *_p) {
         auto it = up_copy.begin();
         while (it != up_copy.end()) {
             if (send(p->get_alive_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
-                if (errno == ECONNRESET) {  // connection reset by peer
-                    // cout << "P" << p->get_pid() << ": ALIVE connection reset by P" << (*it) << ". Removing it from UP set" << endl;
-                    // remove this process from up_ set
-                    //TODO: Hopefully, receive will timeout soon
-                    // and will remove it from UP set
-                } else {
-                    cout << "P" << p->get_pid() << ": ERROR: sending ALIVE to P" << (*it) << endl;
-                    it++;
-                }
+                // if (errno == ECONNRESET) {  // connection reset by peer
+                //     // cout << "P" << p->get_pid() << ": ALIVE connection reset by P" << (*it) << ". Removing it from UP set" << endl;
+                //     // remove this process from up_ set
+                //     //TODO: Hopefully, receive will timeout soon
+                //     // and will remove it from UP set
+                // } else {
+                cout << "P" << p->get_pid() << ": ERROR: sending ALIVE to P" << (*it) << endl;
+                it++;
+                // }
             }
             else {
-                outf << "P" << p->get_pid() << ": ALIVE sent to P" << (*it) << " at " << time(NULL) % 100 << endl;
+                // cout << "P" << p->get_pid() << ": ALIVE sent to P" << (*it) << " at " << time(NULL) % 100 << endl;
                 it++;
             }
         }

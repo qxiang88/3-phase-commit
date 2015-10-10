@@ -4,6 +4,7 @@
 #include "vector"
 #include "string"
 #include "map"
+#include "unordered_set"
 using namespace std;
 
 class Process;
@@ -16,6 +17,17 @@ public:
     bool CreateProcesses();
     void CreateTransactions();
     bool ResurrectProcess(int process_id);
+    void AddToAliveProcessIds(int process_id);
+    void RemoveFromAliveProcessIds(int process_id);
+    int ChooseCoordinator();
+    void SetHandshakeToExpecting();
+    void WaitTillHandshakeReady();
+    void SetCoordHandshakeToInit3PC();
+    void InformCoordinatorOfNewTransaction(int coord_id, int tid);
+    void InformCoordiantorOfParticipants(int coord_id);
+    void ResetProcesses(int coord_id);
+    void IncrementPorts(int p);
+
 
 
 
@@ -33,6 +45,7 @@ public:
     // else returns the string "NULL"
     string get_transaction(int transaction_id);
     void KillProcess(int process_id);
+
 
 
 
@@ -57,6 +70,7 @@ private:
     std::vector<pthread_t> process_thread_;
     static std::vector<string> transaction_;
     static int coordinator_;
+    unordered_set<int> alive_process_ids_;
 
 };
 

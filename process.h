@@ -41,17 +41,22 @@ typedef enum
     ABORT, COMMIT
 } Decision;
 
+typedef enum
+{
+    EXPECTING, READY, INIT3PC, BLANK
+} Handshake;
+
 // status of each process. Used by controller to move to next transaction
 typedef enum
 {
+    // first time process runs
+    // INITIALIZE,
+
     // process is still involved in a transaction related message-passing (but never failed)
     RUNNING,
 
     // process has completed 3PC for the curr transaction. Coordinator mode/Participant Mode over
     DONE,
-
-    // process has crashed during the curr transaction
-    FAILED,
 
     // process is in recovery mode. This means it failed in the past. When it reaches a decision,
     // its state should change to DONE
@@ -60,8 +65,13 @@ typedef enum
 
 class Process : public Controller {
 public:
-    void Initialize(int pid, string log_file, string playlist_file,
+    void Initialize(int pid,
+                    string log_file,
+                    string playlist_file,
+                    int coord_id,
                     ProcessRunningStatus status);
+    
+    void Reset(int coord_id);
     bool LoadPlaylist();
     bool ConnectToProcess(int process_id);
     bool ConnectToProcessAlive(int process_id);
@@ -102,6 +112,10 @@ public:
     void AddThreadToSet(pthread_t thread);
     void RemoveThreadFromSet(pthread_t thread);
     void CreateThread(pthread_t &thread, void* (*f)(void* ), void* arg);
+    void ThreeWayHandshake();
+    void WaitForInit3PC();
+
+
 
     void CloseFDs();
     void CloseAliveFDs();
@@ -148,9 +162,12 @@ public:
     void set_log_file(string logfile);
     void set_playlist_file(string playlistfile);
     void set_my_coordinator(int process_id);
+    int get_transaction_id();
+    void set_transaction_id(int tid);
+    Handshake get_handshake();
+    void set_handshake(Handshake hs);
     ProcessState get_my_state();
     int get_my_coordinator();
-    int get_transaction_id();
     void set_state_req_in_progress(bool );
     void set_my_state(ProcessState state);
     ProcessRunningStatus get_my_status();
@@ -177,7 +194,7 @@ public:
     vector<Decision> prev_decisions_;
     // set of all threads created by a process
     std::unordered_set<pthread_t> thread_set;
-    std::unordered_set<int> alive_processes;
+    bool new_coord_thread_made;
 
 private:
     int pid_;
@@ -185,6 +202,7 @@ private:
     string playlist_file_;
     std::unordered_map<string, string> playlist_;
     bool state_req_in_progress;
+    Handshake handshake_;
 
     // socket fd for each process corresponding to send connection
     std::vector<int> fd_;
@@ -195,7 +213,6 @@ private:
 
     // state of each process
     // for use by coordinator
-    std::vector<ProcessState> process_state_;
     ProcessState my_state_;     // processes self-state
 
     // map of participant process ids and their state

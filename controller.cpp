@@ -4,6 +4,7 @@
 #include "fstream"
 #include "iostream"
 #include "unistd.h"
+#include "limits.h"
 
 int Controller::N;
 int Controller::coordinator_;
@@ -79,7 +80,7 @@ bool Controller::ReadConfigFile() {
     temp.open("configs/count");
     temp >> count;
     temp.close();
-    cout<<"Using config: count "<<count<<endl;
+    cout << "Using config: count " << count << endl;
     ofstream tempw;
     tempw.open("configs/count");
     tempw << (count + 1) % 5;
@@ -133,24 +134,53 @@ bool Controller::CreateProcesses() {
         process_[i].Initialize(i,
                                kLogFile + to_string(i),
                                kPlaylistFile + to_string(i),
-                               RUNNING);
+                               -1,
+                               DONE);
         if (pthread_create(&process_thread_[i], NULL, ThreadEntry, (void *)&process_[i])) {
             cout << "C: ERROR: Unable to create thread for P" << i << endl;
             return false;
         }
+        AddToAliveProcessIds(i);
     }
     return true;
 }
 
+void Controller::IncrementPorts(int p) {
+    int old_send = send_port_[p];
+    int old_alive = alive_port_[p];
+    int old_sdr = sdr_port_[p];
+
+
+    auto it1 = send_port_pid_map_.find(old_send);
+    send_port_pid_map_.erase(it1);
+    send_port_pid_map_.insert(make_pair(old_send + 1, p));
+
+    auto it2 = alive_port_pid_map_.find(old_alive);
+    alive_port_pid_map_.erase(it2);
+    alive_port_pid_map_.insert(make_pair(old_alive + 1, p));
+
+    auto it3 = sdr_port_pid_map_.find(old_sdr);
+    sdr_port_pid_map_.erase(it3);
+    sdr_port_pid_map_.insert(make_pair(old_sdr + 1, p));
+
+    listen_port_[p]++;
+    send_port_[p]++;
+    alive_port_[p]++;
+    sdr_port_[p]++;
+}
+
 bool Controller::ResurrectProcess(int process_id) {
+    IncrementPorts(process_id);
     process_[process_id].Initialize(process_id,
-                           kLogFile + to_string(process_id),
-                           kPlaylistFile + to_string(process_id),
-                           RECOVERY);
+                                    kLogFile + to_string(process_id),
+                                    kPlaylistFile + to_string(process_id),
+                                    -1,
+                                    RECOVERY);
     if (pthread_create(&process_thread_[process_id], NULL, ThreadEntry, (void *)&process_[process_id])) {
         cout << "C: ERROR: Unable to create thread for P" << process_id << endl;
         return false;
     }
+    AddToAliveProcessIds(process_id);
     return true;
 }
 
@@ -167,6 +197,7 @@ void Controller::WaitForThreadJoins() {
 // "EDIT <songName> <newSongName> <newSongURL>"
 void Controller::CreateTransactions() {
     transaction_.push_back(kAdd + " song19 http11");
+    transaction_.push_back(kAdd + " song119 http111");
     // transaction_.push_back(kRemove + " song01");
     // transaction_.push_back(kEdit + " song02 song55 http55");
 }
@@ -180,7 +211,6 @@ string Controller::get_transaction(int transaction_id) {
 
 // closes all FDs opened by the process
 // closes server_sockfd
-// sets process' my_status_ to FAILED
 // cancels all threads created by the process
 // then, cancels the thread_entry thread for that process
 void Controller::KillProcess(int process_id) {
@@ -188,13 +218,86 @@ void Controller::KillProcess(int process_id) {
     process_[process_id].CloseSDRFDs();
     process_[process_id].CloseAliveFDs();
     process_[process_id].Close_server_sockfd();
-    process_[process_id].set_my_status(FAILED);
     for (const auto &th : process_[process_id].thread_set) {
         pthread_cancel(th);
 
     }
     pthread_cancel(process_thread_[process_id]);
+    RemoveFromAliveProcessIds(process_id);
+}
 
+void Controller::AddToAliveProcessIds(int process_id) {
+    alive_process_ids_.insert(process_id);
+}
+
+// from the set of alive_process_ids_ it selects the process
+// with least id whose state is DONE
+int Controller::ChooseCoordinator() {
+    int coord_id = INT_MAX;
+    for (const auto &p : alive_process_ids_) {
+        if (process_[p].get_my_status() == DONE) {
+            coord_id = std::min(coord_id, p);
+        }
+    }
+    cout << "C: Coordinator=" << coord_id << endl;
+    return coord_id;
+}
+
+void Controller::SetHandshakeToExpecting() {
+    for (const auto &p : alive_process_ids_) {
+        if (process_[p].get_my_status() == DONE) {
+            process_[p].set_handshake(EXPECTING);
+        }
+    }
+}
+
+void Controller::WaitTillHandshakeReady() {
+    for (const auto &p : alive_process_ids_) {
+        if (process_[p].get_handshake() == READY) {
+            continue;
+        } else {
+            usleep(kMiniSleep);
+        }
+    }
+}
+
+void Controller::SetCoordHandshakeToInit3PC() {
+    process_[get_coordinator()].set_handshake(INIT3PC);
+}
+
+void Controller::RemoveFromAliveProcessIds(int process_id) {
+    if (alive_process_ids_.find(process_id) != alive_process_ids_.end()) {
+        alive_process_ids_.erase(process_id);
+    }
+}
+
+// sets cooridinator's transaction_id
+void Controller::InformCoordinatorOfNewTransaction(int coord_id, int tid) {
+    process_[coord_id].set_transaction_id(tid);
+}
+
+//Constructs Coordinator's participant_state_map_
+void Controller::InformCoordiantorOfParticipants(int coord_id) {
+    for (const auto &p : alive_process_ids_) {
+        if(p == coord_id) continue;
+        if (process_[p].get_my_status() == DONE ) {
+            process_[coord_id].participant_state_map_.insert(make_pair(p, UNINITIALIZED));
+        } else {
+            continue;
+        }
+    }
+}
+
+// resets only those processes whose states are
+// either DONE
+void Controller::ResetProcesses(int coord_id) {
+    for (const auto &p : alive_process_ids_) {
+        if (process_[p].get_my_status() == DONE ) {
+            process_[p].Reset(coord_id);
+        } else {
+            continue;
+        }
+    }
 }
 
 bool InitializeLocks() {
@@ -211,21 +314,43 @@ int main() {
     if (!c.ReadConfigFile()) return 1;
     c.CreateTransactions();
     if (!c.CreateProcesses()) return 1;
-    sleep(4);
-    c.KillProcess(0);
-    // sleep(4);
-    // c.KillProcess(1);
-    // sleep(4);
-    // c.KillProcess(2);
-    sleep(4);
-    if (!c.ResurrectProcess(0)) return 1;
+
+
+    int t = 0;
+    while (c.get_transaction(t) != "NULL") {
+        cout << "----------------TRANSACTION-" << t << "----------------" << endl;
+        int coord_id = c.ChooseCoordinator();
+        if (coord_id == INT_MAX) {
+            cout << "C: No process can be made coordinator. Sleeping for some time." << endl;
+            usleep(kGeneralSleep);
+            continue;
+
+        } else {
+            c.set_coordinator(coord_id);
+            c.ResetProcesses(coord_id);
+
+            // sets transaction_id_ value for chosen coordinator
+            c.InformCoordinatorOfNewTransaction(coord_id, t);
+            c.InformCoordiantorOfParticipants(coord_id);
+            c.SetHandshakeToExpecting();
+            c.WaitTillHandshakeReady();
+            c.SetCoordHandshakeToInit3PC();
+
+
+
+            sleep(4);
+            c.KillProcess(0);
+            // // sleep(4);
+            // // c.KillProcess(1);
+            // // sleep(4);
+            // // c.KillProcess(2);
+            // sleep(4);
+            // if (!c.ResurrectProcess(0)) return 1;
+        }
+        usleep(kTransactionSleep);
+        t++;
+    }
+
     c.WaitForThreadJoins();
-
-    // int t=0
-    // while(c.get_transaction(t) != "NULL") {
-    //     //TODO: PrepareProcessForNextTransaction()
-    //     // do we move to next transaction only when all previous
-    // }
-
     return 0;
 }

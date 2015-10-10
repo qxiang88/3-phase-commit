@@ -14,7 +14,10 @@
 #include <signal.h>
 using namespace std;
 
+extern pthread_mutex_t new_coord_lock;
+
 bool Process::ConnectToProcessSDR(int process_id) {
+    if (get_sdr_fd(process_id) != -1) return true;
     int sockfd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *clientinfo, *l;
 
@@ -192,10 +195,23 @@ void* ReceiveStateOrDecReq(void* _arg) {
             {
                 if (p->get_my_coordinator() == p->get_pid())
                     continue;
-                p->CreateThread(p->newcoord_thread, NewCoordinatorMode, (void *)p);
+
+                bool templ = false;
+                pthread_mutex_lock(&new_coord_lock);
+                if (!p->new_coord_thread_made)
+                {
+                    p->new_coord_thread_made = true;
+                    templ = true;
+                }
+
+                pthread_mutex_unlock(&new_coord_lock);
+                if (templ) {
+                    p->CreateThread(p->newcoord_thread, NewCoordinatorMode, (void *)p);
+                }
+
             }
             else { //decreq
-                outf<<"Dec req received "<<p->get_my_state()<<endl;
+                outf << "Dec req received " << p->get_my_state() << endl;
                 if (recvd_tid == p->get_transaction_id())
                 {
                     if (p->get_my_state() == COMMITTED || p->get_my_state() == ABORTED)
