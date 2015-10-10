@@ -133,7 +133,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
         // cout<<"$$$$P"<<p->get_pid()<<"sdr_fd"<<pid<<p->get_sdr_fd(pid)<<endl;
         if ((num_bytes = recv(p->get_sdr_fd(pid), buf, kMaxDataSize - 1, 0)) == -1)
         {
-            cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << endl;
             p->RemoveFromUpSet(pid);
             // no need to exit even if there is an error. Hopefully in future, pid will recover
             // and SDRconnect to this process which will set the sdr_fd correctly
@@ -180,7 +180,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
                 else //i am participant
                 {
 
-                    cout<<pid<<" "<<my_coord<<endl;
+                    // cout<<pid<<" "<<my_coord<<endl;
                     if (pid <= (my_coord))
                     {   //only send to valid coord
                         p->set_state_req_in_progress(true);
@@ -221,7 +221,8 @@ void* ReceiveStateOrDecReq(void* _arg) {
 
             }
             else { //decreq
-                outf << "Dec req received; alive= " << p->get_alive_fd(pid) <<" sdr="<< p->get_sdr_fd(pid)<<"fd="<< p->get_fd(pid) << endl;
+                // outf << "Dec req received; alive= " << p->get_alive_fd(pid) <<" sdr="<< p->get_sdr_fd(pid)<<"fd="<< p->get_fd(pid) << endl;
+                cout << "Dec req received " << p->get_my_state() << endl;
                 if (recvd_tid == p->get_transaction_id())
                 {
                     if (p->get_my_state() == COMMITTED || p->get_my_state() == ABORTED)
@@ -285,125 +286,3 @@ void* responder(void *_p) {
 
     return NULL;
 }
-
-// // thread for receiveing SR/DR messages from other processes
-// void* ReceiveStateOrDecReq(void *_p) {
-//     Process *p = (Process *)_p;
-
-//     char buf[kMaxDataSize];
-//     int num_bytes;
-//     pthread_t sr_response_thread;
-
-
-//     fd_set temp_set, partici_set;
-//     int fd_max;
-//     FD_ZERO(&partici_set);
-//     for (auto it = p->participants_.begin(); it != p->participants_.end(); ++it) {
-//         FD_SET(p->get_sdr_fd(*it), &partici_set);
-//         fd_max = max(fd_max, *it);
-//     }
-
-
-//     while (true)
-//     {
-//         // no need to lock mutex here since updates to UP are perfomed
-//         // by this thread itself at the end.
-//         temp_set = partici_set;
-//         sleep(1);
-//         // int rv = select(fd_max + 1, &temp_set, NULL, NULL, NULL);
-//         int rv = 0;
-//         // cout<<"Select returns"<<endl;
-//         if (rv == -1)
-//         {
-//             cout << "P" << p->get_pid() << ": ERROR in select() in SD receive" << endl;
-//             pthread_exit(NULL);
-//         }
-//         // else if (rv == 0)
-//         // { // timeout. not here as NULL time given, right?
-//         //     break;
-//         // }
-//         else
-//         {
-//             cout << "something on SDR" << endl;
-//             for (auto it = p->participants_.begin(); it != p->participants_.end(); ++it)
-//             {
-//                 if (*it == p->get_pid()) continue;
-//                 // if (FD_ISSET(p->get_sdr_fd(*it), &temp_set))
-//                 // { // we got one!!
-//                 if ((num_bytes = recv(p->get_sdr_fd(*it), buf, kMaxDataSize - 1, 0)) == -1)
-//                 {
-//                     cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << *it << endl;
-//                     p->RemoveFromUpSet(*it);
-//                     // pthread_exit(NULL); //TODO: think about whether it should be exit or not
-//                 }
-//                 else if (num_bytes == 0)
-//                 {   //connection closed
-//                     cout << "P" << p->get_pid() << ": SDR connection closed by P" << *it << endl;
-//                     p->RemoveFromUpSet(*it);
-//                 }
-//                 else
-//                 {
-//                     buf[num_bytes] = '\0';
-//                     string type_req, buffer_data;
-//                     int recvd_tid;
-//                     buffer_data = string(buf);
-//                     p->ExtractMsg(buffer_data, type_req, recvd_tid);
-//                     cout << "P" << p->get_pid() << ": SDR recevd from P" << *it << ": " << buf <<  endl;
-//                     if (type_req == kStateReq)
-//                     {   //assumes state req has to be current tid
-
-//                         if (p->get_my_coordinator() == p->get_pid())
-//                         {
-//                             //i am coordinator and have received state req
-//                             if ((*it) < (p->get_pid()))
-//                             {
-//                                 pthread_cancel(p->newcoord_thread);
-//                                 p->set_my_coordinator(*it);
-
-//                                 pthread_cancel(sr_response_thread);
-//                                 p->CreateThread(sr_response_thread, responder, (void *)p);
-//                                 //whyat shud be my mode now
-//                             }
-
-//                         }
-//                         else //i am participant
-//                         {
-//                             if ((*it) <= (p->get_my_coordinator()))
-//                             {   //only send to valid coord
-//                                 if ((*it) < (p->get_my_coordinator()))
-//                                     p->set_my_coordinator(*it);
-
-//                                 pthread_cancel(sr_response_thread);
-//                                 //create responder thread
-//                                 p->CreateThread(sr_response_thread, responder, (void *)p);
-
-//                             }
-//                         }
-//                         //case1 can coord get State req.ya because later no longer coord
-//                     }
-//                     else if (type_req == kURElected)
-//                     {
-//                         if (p->get_my_coordinator() == p->get_pid())
-//                             continue;
-//                         p->CreateThread(p->newcoord_thread, NewCoordinatorMode, (void *)p);
-//                     }
-//                     else { //decreq
-//                         if (recvd_tid == p->get_transaction_id())
-//                         {
-//                             if (p->get_my_state() == COMMITTED || p->get_my_state() == ABORTED)
-//                                 p->SendDecision((*it));
-//                         }
-//                         else if (recvd_tid < p->get_transaction_id())
-//                         {
-//                             // if(my_state_==COMMITTED || my_state_==ABORTED)
-//                             p->SendPrevDecision((*it), recvd_tid);
-//                         }
-//                     }
-//                 }
-//                 // }
-//             }
-//         }
-//         // p->UpdateUpSet(alive_processes);
-//     }
-//     return NULL;
-// }

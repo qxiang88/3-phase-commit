@@ -481,14 +481,12 @@ void Process::CoordinatorMode() {
     CreateAliveThreads(receive_alive_threads, send_alive_thread);
     WaitForVotes();
 
-    
-    
-
     string trans = get_transaction(transaction_id_);
     //TODO: Handle case when trans = "NULL". See also ConstructVoteReq same cases
     Vote(trans); //coordinator's self vote
     // iterate through the states of all processes
     bool abort = false;
+
 
     for (const auto& ps : participant_state_map_) {
         if (ps.second == PROCESSTIMEOUT || ps.second == ABORTED) {
@@ -514,7 +512,8 @@ void Process::CoordinatorMode() {
     } else {
 
         LogPreCommit();
-    // return;
+        // return;
+        
         SendPreCommitToAll();
         WaitForAck();
         LogCommit();

@@ -732,10 +732,16 @@ void Process::Recovery()
     //probably need to send the decision to others
 
     if (decision == "commit")
-        my_state_ = COMMITTED;
+        {
+            my_state_ = COMMITTED;
+            cout<<"Had received commit"<<endl;
+        }
 
     else if (decision == "abort")
-        my_state_ = ABORTED;
+        {
+            my_state_ = ABORTED;
+            cout<<"Had received abort"<<endl;
+        }
 
     else if (decision == "precommit")
     {
@@ -748,15 +754,21 @@ void Process::Recovery()
         string vote = GetVote();
         if (vote == "yes")
         {
+            cout<<"Had voted yes"<<endl;
             my_state_ = UNCERTAIN;
             DecisionRequest();
         }
         else if (vote.empty())
         {
+            cout<<"Hadnt voted. So aborting"<<endl;
             my_state_ = ABORTED;
             LogAbort();
         }
     }
+    cout<<"Decided. My state is ";
+    if(get_my_state()==1)cout<<"Aborted"<<endl;
+    else if(get_my_state()==4)cout<<"Commited"<<endl;
+
 }
 
 void Process::Timeout()
@@ -859,7 +871,13 @@ void* ReceiveDecision(void* _rcv_thread_arg)
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << p->get_pid() << ": DecMsg received from P" << pid << ": " << buf <<  endl;
+            cout << "P" << p->get_pid() << ": DecMsg received from P" << pid << ": ";
+            if(buf[0]=='0')
+                cout<<"Abort"<<endl;
+            else if(buf[1]=='1')
+                cout<<"Commit"<<endl;
+            else
+                cout<<buf<<endl;
 
             string extracted_msg;
             int received_tid;

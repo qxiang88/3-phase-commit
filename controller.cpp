@@ -344,8 +344,8 @@ int main() {
             // // c.KillProcess(1);
             // // sleep(4);
             // // c.KillProcess(2);
-            // sleep(6);
-            // if (!c.ResurrectProcess(0)) return 1;
+            sleep(4);
+            if (!c.ResurrectProcess(0)) return 1;
         }
         usleep(kTransactionSleep);
         t++;
