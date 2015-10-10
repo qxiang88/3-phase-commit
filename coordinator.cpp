@@ -482,7 +482,6 @@ void Process::CoordinatorMode() {
     WaitForVotes();
 
     
-    return;
     
 
     string trans = get_transaction(transaction_id_);
@@ -515,6 +514,7 @@ void Process::CoordinatorMode() {
     } else {
 
         LogPreCommit();
+    // return;
         SendPreCommitToAll();
         WaitForAck();
         LogCommit();

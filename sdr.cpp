@@ -221,7 +221,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
 
             }
             else { //decreq
-                outf << "Dec req received " << p->get_my_state() << endl;
+                outf << "Dec req received; alive= " << p->get_alive_fd(pid) <<" sdr="<< p->get_sdr_fd(pid)<<"fd="<< p->get_fd(pid) << endl;
                 if (recvd_tid == p->get_transaction_id())
                 {
                     if (p->get_my_state() == COMMITTED || p->get_my_state() == ABORTED)

@@ -338,13 +338,13 @@ int main() {
 
 
 
-            sleep(4);
-            c.KillProcess(0);
+            // sleep(4);
+            // c.KillProcess(0);
             // // sleep(4);
             // // c.KillProcess(1);
             // // sleep(4);
             // // c.KillProcess(2);
-            // sleep(4);
+            // sleep(6);
             // if (!c.ResurrectProcess(0)) return 1;
         }
         usleep(kTransactionSleep);

@@ -220,6 +220,13 @@ void* server(void* _p) {
         } else {
             process_id = p->get_alive_port_pid_map(incoming_port);
             if (process_id != -1) { // incoming connection is from alive port
+
+                if (setsockopt(new_fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&kReceiveAliveTimeoutTimeval,
+                               sizeof(struct timeval)) == -1) {
+                    perror("setsockopt ERROR");
+                    exit(1);
+                }
+
                 p->set_alive_fd(process_id, new_fd);
                 // cout << "P" << p->get_pid() << ": Server: accepting ALIVE connection from P"
                 // << p->get_alive_port_pid_map(incoming_port) << endl;

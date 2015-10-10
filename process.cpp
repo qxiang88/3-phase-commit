@@ -110,12 +110,13 @@ void Process::Initialize(int pid,
     up_.clear();
     participants_.clear();
     participant_state_map_.clear();
-
+    rcv_alive_thread_arg.clear();
 
     fd_.resize(N, -1);
     alive_fd_.resize(N, -1);
     sdr_fd_.resize(N, -1);
 
+    rcv_sdr_thread_arg = NULL;
     transaction_id_ = -1;
     my_state_ = UNINITIALIZED;
     newcoord_thread = 0;
@@ -676,7 +677,7 @@ void Process::Recovery()
     LoadLogAndPrevDecisions();
 
     LoadTransactionId();
-    if(transaction_id_==-1)
+    if (transaction_id_ == -1)
         return;
 
     LoadParticipants();
@@ -695,14 +696,14 @@ void Process::Recovery()
 
     for (auto const &p : participants_) {
         if (p == get_pid()) continue;
-        if (ConnectToProcess(p)) {
-            if (ConnectToProcessAlive(p)) {
-                ConnectToProcessSDR(p);
-            } else {
-                //TODO: I don't think we need to do anything special
-                // apart from not adding participant_[i] to the upset.
-                cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << p << endl;
-            }
+        if (ConnectToProcess(p))
+        {
+            // if (ConnectToProcessAlive(p)) {
+            ConnectToProcessSDR(p);
+            // } else {
+            //TODO: I don't think we need to do anything special
+            // apart from not adding participant_[i] to the upset.
+            // cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << p << endl;
         } else {
             //TODO: I don't think we need to do anything special
             // apart from not adding participant_[i] to the upset.
@@ -784,11 +785,13 @@ void Process::DecisionRequest()
 
 void Process::WaitForDecisionResponse() {
     int n = participants_.size();
-    std::vector<pthread_t> receive_thread(n);
+    std::vector<pthread_t> receive_thread(n - 1);
 
-    ReceiveDecThreadArgument **rcv_thread_arg = new ReceiveDecThreadArgument*[n];
+    ReceiveDecThreadArgument **rcv_thread_arg = new ReceiveDecThreadArgument*[n - 1];
     int i = 0;
     for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
+        if (*it == get_pid()) continue;
+
         rcv_thread_arg[i] = new ReceiveDecThreadArgument;
         rcv_thread_arg[i]->p = this;
         rcv_thread_arg[i]->pid = *it;
@@ -803,6 +806,8 @@ void Process::WaitForDecisionResponse() {
 
     i = 0;
     for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
+        if (*it == get_pid()) continue;
+
         pthread_join(receive_thread[i], &status);
         RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->decision) == COMMIT)
@@ -934,9 +939,9 @@ void Process::TerminationProtocol()
 
         SendURElected(get_my_coordinator());
         usleep(kGeneralTimeout);
-        
+
         bool temp_sr = false;
-        
+
         pthread_mutex_lock(&state_req_lock);
         temp_sr = state_req_in_progress;
         pthread_mutex_unlock(&state_req_lock);
@@ -1099,7 +1104,7 @@ void Process::SendState(int recp)
     string msg;
     string msg_to_send = to_string((int)my_state_);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    cout<<"trying to send st to "<<recp<<endl;
+    cout << "trying to send st to " << recp << endl;
     if (recp == INT_MAX)
         return;
 
@@ -1122,7 +1127,7 @@ void Process::SendDecision(int recp)
         code_to_send = ABORT;
     string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    // cout << get_fd(recp) << " " << recp << endl;
+    cout << get_fd(recp) << " " << recp << endl;
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << endl;
         RemoveFromUpSet(recp);
