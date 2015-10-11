@@ -20,13 +20,14 @@ extern void* SendAlive(void *_p);
 extern void* SendUpReq(void *_p);
 extern void* ReceiveAlive(void *_p);
 extern void* ReceiveStateOrDecReq(void *_p);
-extern void* ReceiveUpReq(void* _arg);
-extern void* ReceiveUpSet(void* _rcv_thread_arg);
+extern void* ReceiveUp(void* _arg);
+// extern void* ReceiveUpSet(void* _rcv_thread_arg);
 extern void* ReceiveDecision(void *_p);
 extern void* NewCoordinatorMode(void *_p);
 extern int return_port_no(struct sockaddr *sa);
 extern void sigchld_handler(int s);
 extern vector<string> split(string s, char delimiter);
+extern set<int> convertStringToSet(string s);
 extern void PrintUpSet(int, set<int>);
 extern void* SendDecReq(void *_p);
 extern void* SendUpReq(void *_p);
@@ -211,6 +212,7 @@ public:
     // NEVER failed during that iteration
     // does not include self
     set<int> up_;
+    map< int, set<int> > all_up_sets_;
 
     // list of processes involved in a transaction (and hence, an iteration of 3PC)
     unordered_set<int> participants_;
@@ -241,7 +243,6 @@ private:
     std::vector<int> sdr_fd_;
     std::vector<int> up_fd_;
 
-    map< int, set<int> > all_up_sets_;
     // state of each process
     // for use by coordinator
     ProcessState my_state_;     // processes self-state

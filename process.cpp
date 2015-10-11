@@ -537,7 +537,7 @@ void Process::CreateUpThread(int process_id, pthread_t &up_receive_thread) {
     ReceiveSDRUpThreadArgument* rcv_up_thread_arg = new ReceiveSDRUpThreadArgument;
     rcv_up_thread_arg-> p = this;
     rcv_up_thread_arg->for_whom = process_id;
-    CreateThread(up_receive_thread, ReceiveUpReq, (void *)rcv_up_thread_arg);
+    CreateThread(up_receive_thread, ReceiveUp, (void *)rcv_up_thread_arg);
 }
 
 
@@ -883,40 +883,6 @@ void Process::Timeout()
     TerminationProtocol();
 }
 
-void Process::DecisionRequest()
-{
-    string msg;
-    string msg_to_send = kDecReq;
-    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    //if total failure, then init termination protocol with total failure. give arg to TP
-    ProcessState local_my_state;
-
-    // sleep(15);
-    while (true)
-    {
-        cout<<"Starting dec req to all "<<endl;
-        SendDecReqToAll(msg);
-        WaitForDecisionResponse();
-        local_my_state = get_my_state();
-
-        if (local_my_state == ABORTED)
-        {
-            break;
-        }
-        else if (local_my_state == COMMITTED)
-        {
-            break;
-        }
-        usleep(kDecReqTimeout);
-
-    }
-
-    cout<<"Decided. My state is ";
-    if(get_my_state()==1)cout<<"Aborted"<<endl;
-    else if(get_my_state()==4)cout<<"Commited"<<endl;
-
-    return;   
-}
 
 void Process::WaitForDecisionResponse() {
     int n = participants_.size();
@@ -941,16 +907,8 @@ void Process::WaitForDecisionResponse() {
     for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
         pthread_join(receive_thread[i], &status);
         RemoveThreadFromSet(receive_thread[i]);
-        if ((rcv_thread_arg[i]->decision) == COMMIT)
-        {
-            set_my_state(COMMITTED);
+        if(get_my_state()==COMMITTED || get_my_state()==ABORTED)
             return;
-        }
-        else if ((rcv_thread_arg[i]->decision) == ABORT)
-        {
-            set_my_state(ABORTED);
-            return;
-        }
         i++;
     }
 }
@@ -962,10 +920,10 @@ void* ReceiveDecision(void* _rcv_thread_arg)
     int tid = rcv_thread_arg->transaction_id;
     Process *p = rcv_thread_arg->p;
 
-    ofstream outf("log/decresponse/" + to_string(p->get_pid()) + "from" + to_string(pid));
+    // ofstream outf("log/decresponse/" + to_string(p->get_pid()) + "from" + to_string(pid));
 
-    if (!outf.is_open())
-        cout << "Failed to open log file for decresponse" << endl;
+    // if (!outf.is_open())
+    //     cout << "Failed to open log file for decresponse" << endl;
 
     char buf[kMaxDataSize];
     int num_bytes;
@@ -1010,7 +968,19 @@ void* ReceiveDecision(void* _rcv_thread_arg)
             p->ExtractMsg(string(buf), extracted_msg, received_tid);
 
             Decision msg = static_cast<Decision>(atoi(extracted_msg.c_str()));
-            rcv_thread_arg->decision = msg;
+            // rcv_thread_arg->decision = msg;
+
+            if ((msg) == COMMIT)
+            {
+                p->set_my_state(COMMITTED);
+            }
+            else if ((msg) == ABORT)
+            {
+                p->set_my_state(ABORTED);
+            }
+
+
+
             //assumes that correct message type is sent by participant
         }
     }
@@ -1034,7 +1004,7 @@ void Process::SendDecReqToAll(const string &msg) {
             RemoveFromUpSet(*it);
         }
         else {
-            cout << "P" << get_pid() << ": Msg sent to P" << (*it) << ": " << msg << endl;
+            // cout << "P" << get_pid() << ": Msg sent to P" << (*it) << ": " << msg << endl;
         }
     }
 }
@@ -1044,19 +1014,49 @@ bool Process::CheckAliveEqualsIntersection()
     assert (all_up_sets_.size()!=0);
     set<int> intersection_up(up_);
     set<int> alive_processes_now;
+    cout<<"alive_processes_now: ";
     for(auto iter = all_up_sets_.begin(); iter!=all_up_sets_.end(); iter++)
     {
         set_intersection(intersection_up.begin(),intersection_up.end(),iter->second.begin(),iter->second.end(),
                   std::inserter(intersection_up,intersection_up.begin()));
         alive_processes_now.insert(iter->first);
-        // cout<<iter->first<<" ";
+        cout<<iter->first<<" ";
     }
-    // cout<<endl;
-
-    // for(auto it = intersection_up.begin(); it!=intersection_up.end(); it++)
-    //     cout<<*it<<" ";
-    // cout<<endl;
+    cout<<endl;
+    cout<<"intersection: ";
+    for(auto it = intersection_up.begin(); it!=intersection_up.end(); it++)
+        cout<<*it<<" ";
+    cout<<endl;
     return (intersection_up==alive_processes_now);
+}
+
+void Process::DecisionRequest()
+{
+    string msg;
+    string msg_to_send = kDecReq;
+    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    //if total failure, then init termination protocol with total failure. give arg to TP
+    ProcessState local_my_state;
+
+    // sleep(15);
+    while (true)
+    {
+        cout<<"Starting dec req to all "<<endl;
+        SendDecReqToAll(msg);
+        WaitForDecisionResponse();
+        local_my_state = get_my_state();
+
+        if (local_my_state == ABORTED)
+        {
+            break;
+        }
+        else if (local_my_state == COMMITTED)
+        {
+            break;
+        }
+        // usleep(kDecReqTimeout);
+    }
+    return;   
 }
 
 void Process::TotalFailureCheck()
@@ -1065,11 +1065,14 @@ void Process::TotalFailureCheck()
 
     while (true)
     {
-        // cout<<"Starting total failure check"<<endl;
+        // break;
+        cout<<"Starting total failure check"<<endl;
         SendUpReqToAll();
-        WaitForUpResponse();
+        // WaitForUpResponse();
         // cout<<"returned to total failure"<<endl;
         all_up_sets_[get_pid()] = up_; //add mine to allupsets
+        usleep(kGeneralTimeout);
+
         bool is_total_failure = CheckAliveEqualsIntersection();
         if(!is_total_failure)
             cout<<"Intersection doesnt match"<<endl;
@@ -1084,7 +1087,7 @@ void Process::TotalFailureCheck()
         {
             break;
         }
-        usleep(kUpReqTimeout);
+        // usleep(kUpReqTimeout);
     }
 }
 
@@ -1328,7 +1331,7 @@ void Process::SendDecision(int recp)
         RemoveFromUpSet(recp);
     }
     else {
-        cout << "P" << get_pid() << ": decision Msg sent to P" << recp << ": " << msg << endl;
+        // cout << "P" << get_pid() << ": decision Msg sent to P" << recp << ": " << msg << endl;
     }
 }
 

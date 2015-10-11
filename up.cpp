@@ -31,7 +31,7 @@ void Process::SendUpReqToAll() {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (*it) << endl;
         }
         else {
-            cout << "P" << get_pid() << ": Up req sent to P" << (*it) << " on "<<get_up_fd(*it)<<": " << msg << endl;
+            // cout << "P" << get_pid() << ": Up req sent to P" << (*it) << " on "<<get_up_fd(*it)<<": " << msg << endl;
         }
     }
 }
@@ -134,7 +134,7 @@ bool Process::ConnectToProcessUp(int process_id) {
 }
 
 // thread for receiving SR/DR messages from one process
-void* ReceiveUpReq(void* _arg) {
+void* ReceiveUp(void* _arg) {
     ReceiveSDRUpThreadArgument* arg = (ReceiveSDRUpThreadArgument*)_arg;
     Process* p = arg->p;
     int for_whom = arg->for_whom;
@@ -142,6 +142,8 @@ void* ReceiveUpReq(void* _arg) {
     char buf[kMaxDataSize];
     int num_bytes;
     pthread_t sr_response_thread;
+
+    set<string> many_messages;
 
     ofstream outf("log/up/" + to_string(p->get_pid()) + "from" + to_string(for_whom));
 
@@ -163,67 +165,73 @@ void* ReceiveUpReq(void* _arg) {
         else
         {
             buf[num_bytes] = '\0';
-            string type_req, buffer_data;
+            string bufstring(buf);
+            vector<string> all_msgs = split(bufstring, '$');
+            for (auto iter = all_msgs.begin(); iter != all_msgs.end(); iter++)
+            {
+                many_messages.insert(*iter);
+            }
+            string extracted_msg;
             int recvd_tid;
-            buffer_data = string(buf);
-            p->ExtractMsg(buffer_data, type_req, recvd_tid);
-            outf << "P" << p->get_pid() << ": UP recevd from P" << for_whom << ": " << buf <<  endl;
-            int my_coord = p->get_my_coordinator();
-            if (type_req == kUpReq)
-            { 
-                //upreq sent only in total failure. means everyone is in same trans. other case notpos
-                if (recvd_tid == p->get_transaction_id())
-                {
+
+            for(auto iter = many_messages.begin(); iter!=many_messages.end(); iter++)
+            {
+                p->ExtractMsg(*iter, extracted_msg, recvd_tid);
+                outf << "P" << p->get_pid() << ": UP recevd from P" << for_whom << ": " << *iter <<  endl;
+                if (extracted_msg == kUpReq && recvd_tid == p->get_transaction_id())
+                { 
+                    //upreq sent only in total failure. means everyone is in same trans.
+                    //if lower upreq got, ignore
                     p->SendMyUp(for_whom);
-                    //btw termination protocol can happen.
                 }
-                else{
-                    cout<<"Not total failure"<<endl;
-                    //send nothing back. as dec req will talk to this process
+                else
+                {//up set received
+                    outf<<"Up Set received"<<endl;
+                    p->all_up_sets_[for_whom] = convertStringToSet(extracted_msg);
                 }
             }
+
         }
         usleep(kGeneralSleep);
     }
 }
 
+// void Process::WaitForUpResponse() {
+//     int n = participants_.size();
+//     std::vector<pthread_t> up_receive_thread(n);
+//     ReceiveUpThreadArgument **rcv_thread_arg = new ReceiveUpThreadArgument*[n];
+//     int i = 0;
+//     for (auto it = participants_.begin(); it != participants_.end(); ++it ) { 
+//         if(*it==get_pid())continue;
+//         rcv_thread_arg[i] = new ReceiveUpThreadArgument;
+//         rcv_thread_arg[i]->p = this;
+//         rcv_thread_arg[i]->pid = *it;
+//         rcv_thread_arg[i]->transaction_id = transaction_id_;
+//         rcv_thread_arg[i]->received_msg_type = YES;
+//         CreateThread(up_receive_thread[i], ReceiveUpSet, (void *)rcv_thread_arg[i]);
+//         i++;
+//     }
 
-void Process::WaitForUpResponse() {
-    int n = participants_.size();
-    std::vector<pthread_t> up_receive_thread(n);
-    ReceiveUpThreadArgument **rcv_thread_arg = new ReceiveUpThreadArgument*[n];
-    int i = 0;
-    for (auto it = participants_.begin(); it != participants_.end(); ++it ) { 
-        if(*it==get_pid())continue;
-        rcv_thread_arg[i] = new ReceiveUpThreadArgument;
-        rcv_thread_arg[i]->p = this;
-        rcv_thread_arg[i]->pid = *it;
-        rcv_thread_arg[i]->transaction_id = transaction_id_;
-        rcv_thread_arg[i]->received_msg_type = YES;
-        CreateThread(up_receive_thread[i], ReceiveUpSet, (void *)rcv_thread_arg[i]);
-        i++;
-    }
+//     void* status;
 
-    void* status;
-
-    i = 0;
-    for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
-        if(*it==get_pid())continue;
-        pthread_join(up_receive_thread[i], &status);
-        RemoveThreadFromSet(up_receive_thread[i]);
-        if ((rcv_thread_arg[i]->received_msg_type==ERROR) ||  (rcv_thread_arg[i]->received_msg_type==TIMEOUT))
-        {
-            cout<<"Didn't receive up from "<<(*it)<<endl;
-        }
-        else
-        {
-            // cout<<"assigned up set"<<endl;
-            all_up_sets_[*it] = rcv_thread_arg[i]->up;
-            // return;
-        }
-        i++;
-    }
-}
+//     i = 0;
+//     for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
+//         if(*it==get_pid())continue;
+//         pthread_join(up_receive_thread[i], &status);
+//         RemoveThreadFromSet(up_receive_thread[i]);
+//         if ((rcv_thread_arg[i]->received_msg_type==ERROR) ||  (rcv_thread_arg[i]->received_msg_type==TIMEOUT))
+//         {
+//             cout<<"Didn't receive up from "<<(*it)<<endl;
+//         }
+//         else
+//         {
+//             // cout<<"assigned up set"<<endl;
+//             all_up_sets_[*it] = rcv_thread_arg[i]->up;
+//             // return;
+//         }
+//         i++;
+//     }
+// }
 
 void Process::ConstructUpReq(string &msg) {
     msg = kUpReq + " " + to_string(transaction_id_);
@@ -271,7 +279,7 @@ set<int> convertStringToSet(string s){
 void Process::SendMyUp(int pid_other){
     string msg;
     ConstructUpResponse(msg);
-    if (send(get_fd(pid_other), msg.c_str(), msg.size(), 0) == -1) {
+    if (send(get_up_fd(pid_other), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending my up to P" << pid_other << endl;
         RemoveFromUpSet(pid_other);
     }
@@ -281,55 +289,55 @@ void Process::SendMyUp(int pid_other){
     }   
 }
 
-void* ReceiveUpSet(void* _rcv_thread_arg)
-{
-    ReceiveUpThreadArgument *rcv_thread_arg = (ReceiveUpThreadArgument *)_rcv_thread_arg;
-    int pid = rcv_thread_arg->pid;
-    int tid = rcv_thread_arg->transaction_id;
-    Process *p = rcv_thread_arg->p;
+// void* ReceiveUpSet(void* _rcv_thread_arg)
+// {
+//     ReceiveUpThreadArgument *rcv_thread_arg = (ReceiveUpThreadArgument *)_rcv_thread_arg;
+//     int pid = rcv_thread_arg->pid;
+//     int tid = rcv_thread_arg->transaction_id;
+//     Process *p = rcv_thread_arg->p;
 
 
-    ofstream outf("log/upresponse/" + to_string(p->get_pid()) + "from" + to_string(pid));
+//     ofstream outf("log/upresponse/" + to_string(p->get_pid()) + "from" + to_string(pid));
 
-    if (!outf.is_open())
-        cout << "Failed to open log file for upresponse" << endl;
+//     if (!outf.is_open())
+//         cout << "Failed to open log file for upresponse" << endl;
 
-    char buf[kMaxDataSize];
-    int num_bytes;
-    //TODO: write code to extract multiple messages
+//     char buf[kMaxDataSize];
+//     int num_bytes;
+//     //TODO: write code to extract multiple messages
 
-    fd_set temp_set;
-    FD_ZERO(&temp_set);
-    FD_SET(p->get_fd(pid), &temp_set);
-    int fd_max = p->get_fd(pid);
-    int rv;
+//     fd_set temp_set;
+//     FD_ZERO(&temp_set);
+//     FD_SET(p->get_up_fd(pid), &temp_set);
+//     int fd_max = p->get_up_fd(pid);
+//     int rv;
 
-    rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
-    if (rv == -1) { //error in select
-        cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << endl;
-        rcv_thread_arg->received_msg_type = ERROR;
-    } else if (rv == 0) {   //timeout
-        cout<<"timedout"<<endl;
-        rcv_thread_arg->received_msg_type = TIMEOUT;
-    } else {    // activity happened on the socket
-        if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
-            cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
-            rcv_thread_arg->received_msg_type = ERROR;
-        } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
-            rcv_thread_arg->received_msg_type = TIMEOUT;
-        } else {
-            buf[num_bytes] = '\0';
-            outf << "P" << p->get_pid() << ": Up set received from P" << pid << endl;//": "<<buf<<endl;
-            string extracted_msg;
-            int received_tid;
-            p->ExtractMsg(string(buf), extracted_msg, received_tid);            
-            rcv_thread_arg->up = convertStringToSet(extracted_msg);
-        }
-    }
-    // cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
-    return NULL;
-}
+//     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
+//     if (rv == -1) { //error in select
+//         cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << endl;
+//         rcv_thread_arg->received_msg_type = ERROR;
+//     } else if (rv == 0) {   //timeout
+//         cout<<"timedout"<<endl;
+//         rcv_thread_arg->received_msg_type = TIMEOUT;
+//     } else {    // activity happened on the socket
+//         if ((num_bytes = recv(p->get_up_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
+//             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
+//             rcv_thread_arg->received_msg_type = ERROR;
+//         } else if (num_bytes == 0) {     //connection closed
+//             cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
+//             rcv_thread_arg->received_msg_type = TIMEOUT;
+//         } else {
+//             buf[num_bytes] = '\0';
+//             outf << "P" << p->get_pid() << ": Up set received from P" << pid << endl;//": "<<buf<<endl;
+//             string extracted_msg;
+//             int received_tid;
+//             p->ExtractMsg(string(buf), extracted_msg, received_tid);            
+//             rcv_thread_arg->up = convertStringToSet(extracted_msg);
+//         }
+//     }
+//     // cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
+//     return NULL;
+// }
 
 void* SendUpReq(void *_p) {
     Process *p = (Process *)_p;
