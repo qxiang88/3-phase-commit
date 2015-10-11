@@ -1,7 +1,7 @@
 all: controller cleanlog
 
-controller: controller.o process.o socket.o coordinator.o participant.o alive.o sdr.o
-	g++ -g -std=c++0x -o controller controller.o process.o socket.o coordinator.o participant.o alive.o sdr.o -pthread
+controller: controller.o process.o socket.o coordinator.o participant.o alive.o sdr.o up.o
+	g++ -g -std=c++0x -o controller controller.o process.o socket.o coordinator.o participant.o alive.o sdr.o up.o -pthread
 
 controller.o: controller.cpp controller.h constants.h process.h
 	g++ -g -std=c++0x -c controller.cpp 
@@ -24,6 +24,9 @@ alive.o: alive.cpp controller.h constants.h process.h
 sdr.o: sdr.cpp controller.h constants.h process.h
 	g++ -g -std=c++0x -c sdr.cpp
 
+up.o: up.cpp controller.h constants.h process.h
+	g++ -g -std=c++0x -c up.cpp
+
 clean:
 	rm -f *.o controller
 
@@ -32,4 +35,5 @@ cleanlog:
 	mkdir log/recalivelog/
 	mkdir log/sendalivelog/
 	mkdir log/sdr/
+	mkdir log/up/
 	./controller

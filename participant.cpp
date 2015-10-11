@@ -317,11 +317,17 @@ void Process::ConstructUpSet() {
         // cout<<p<<endl;
         // ConnectToProcess(p);
         if (ConnectToProcessAlive(p)) {
-            ConnectToProcessSDR(p);
-            up_.insert(p);
+            if(ConnectToProcessSDR(p)){
+                if(ConnectToProcessUp(p)){
+                    up_.insert(p);
+                }
+                else 
+                    cout << "P" << get_pid() << ": Unable to connect Up to P" << p << endl;
+            }
+            else{
+                cout << "P" << get_pid() << ": Unable to connect SDR to P" << p << endl;
+            }
         } else {
-            //TODO: I don't think we need to do anything special
-            // apart from not adding participant_[i] to the upset.
             cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << p << endl;
         }
     }
@@ -361,19 +367,19 @@ void Process::ParticipantMode() {
         // size = participant_.size()-1 because it contains self
         // size + 1 for coordinator
         vector<pthread_t> sdr_receive_threads(participants_.size());
+        vector<pthread_t> up_receive_threads(participants_.size());
+
         int i = 0;
         for (auto it = participants_.begin(); it != participants_.end(); ++it) {
             //make sure you don't create a SDR receive thread for self
             if (*it == get_pid()) continue;
             CreateSDRThread(*it, sdr_receive_threads[i]);
+            CreateUpThread(*it, up_receive_threads[i]);
             i++;
         }
-
         CreateSDRThread(get_my_coordinator(), sdr_receive_threads[i]);
+        CreateUpThread(get_my_coordinator(), up_receive_threads[i]);
 
-
-        // vector<pthread_t> sdr_receive_thread;
-        // CreateSDRThread(sdr_receive_thread);
         // usleep(kGeneralSleep); //sleep to make sure connections are established
     }
 

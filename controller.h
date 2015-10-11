@@ -40,6 +40,8 @@ public:
     int get_alive_port(int process_id);
     int get_sdr_port_pid_map(int port_num);
     int get_sdr_port(int process_id);
+    int get_up_port(int process_id);
+    int get_up_port_pid_map(int port_num);
 
     // returns transaction string if transaction_id is valid
     // else returns the string "NULL"
@@ -59,11 +61,15 @@ private:
     // alive_port number of each process
     static std::vector<int> alive_port_;
     static std::vector<int> sdr_port_;
+    static std::vector<int> up_port_;
+
     // maps send ports to PIDs
     static std::map<int, int> send_port_pid_map_;
     // maps alive ports to PIDs
     static std::map<int, int> alive_port_pid_map_;
     static std::map<int, int> sdr_port_pid_map_;
+    static std::map<int, int> up_port_pid_map_;
+
     // Process object's pointer for each process
     std::vector<Process> process_;
     // vector of threads for each process

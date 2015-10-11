@@ -439,12 +439,19 @@ void Process::CoordinatorMode() {
 
     for (const auto &pm: participant_state_map_) {
         if (pm.first == get_pid()) continue;
-        if (ConnectToProcess(pm.first)) {
-            // setup alive connection to this process
-            if (ConnectToProcessAlive(pm.first)) {
-                ConnectToProcessSDR(pm.first);
-                up_.insert(pm.first);
-            } else {
+        if (ConnectToProcess(pm.first)) 
+        {// setup alive connection to this process
+            if (ConnectToProcessAlive(pm.first)) 
+            {
+                if(ConnectToProcessSDR(pm.first))
+                {
+                    ConnectToProcessUp(pm.first);
+                    up_.insert(pm.first);
+                } else {
+                    cout << "P" << get_pid() << ": Unable to connect SDR to P" << pm.first << endl;
+                }
+            }
+            else{
                 // Practically, this should not happen, since it just connected to i.
                 // TODO: not handling this rare case presently
                 // this causes up_ to deviate from participant_state_map_ at the beginning
@@ -463,14 +470,15 @@ void Process::CoordinatorMode() {
     // because any participant could ask for Dec Req in future.
     // size = participant_state_map_.size() because it does not contain self
     vector<pthread_t> sdr_receive_threads(participant_state_map_.size());
+    vector<pthread_t> up_receive_threads(participant_state_map_.size());
     int i = 0;
     for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it) {
         //make sure you don't create a SDR receive thread for self
         if (it->first == get_pid()) continue;
         CreateSDRThread(it->first, sdr_receive_threads[i]);
+        CreateUpThread(it->first, sdr_receive_threads[i]);
         i++;
     }
-    // CreateSDRThread(sdr_receive_threads);
 
     string msg;
     ConstructVoteReq(msg);
@@ -484,10 +492,8 @@ void Process::CoordinatorMode() {
     string trans = get_transaction(transaction_id_);
     //TODO: Handle case when trans = "NULL". See also ConstructVoteReq same cases
     Vote(trans); //coordinator's self vote
-    // iterate through the states of all processes
+
     bool abort = false;
-
-
     for (const auto& ps : participant_state_map_) {
         if (ps.second == PROCESSTIMEOUT || ps.second == ABORTED) {
             abort = true;
@@ -498,7 +504,6 @@ void Process::CoordinatorMode() {
         abort = true;
 
     if (abort) {
-
         LogAbort();
         my_state_ = ABORTED;
 
@@ -512,15 +517,10 @@ void Process::CoordinatorMode() {
     } else {
 
         LogPreCommit();
-        
-
-        return;
-        
         SendPreCommitToAll();
         WaitForAck();
         LogCommit();
         my_state_ = COMMITTED;
-
         SendCommitToAll();
     }
 

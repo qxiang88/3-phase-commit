@@ -19,6 +19,10 @@ using namespace std;
 pthread_mutex_t up_lock;
 
 void Process::RemoveFromUpSet(int k) {
+
+    if(get_my_status()==RECOVERY)
+        return;
+
     bool log = false;
     pthread_mutex_lock(&up_lock);
     if (up_.find(k) != up_.end()) {
@@ -36,6 +40,8 @@ void Process::RemoveFromUpSet(int k) {
         reset_fd(k);
         reset_alive_fd(k);
         reset_sdr_fd(k);
+        reset_up_fd(k);
+
     }
 }
 

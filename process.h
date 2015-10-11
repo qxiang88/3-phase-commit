@@ -19,6 +19,7 @@ extern void* ReceiveStateFromParticipant(void* _rcv_thread_arg);
 extern void* SendAlive(void *_p);
 extern void* ReceiveAlive(void *_p);
 extern void* ReceiveStateOrDecReq(void *_p);
+extern void* ReceiveUpReq(void* _arg);
 extern void* ReceiveDecision(void *_p);
 extern void* NewCoordinatorMode(void *_p);
 extern int return_port_no(struct sockaddr *sa);
@@ -26,7 +27,9 @@ extern void sigchld_handler(int s);
 extern vector<string> split(string s, char delimiter);
 extern void PrintUpSet(int, unordered_set<int>);
 
-struct ReceiveSDRThreadArgument;
+extern void* SendUp(void *_p);
+
+struct ReceiveSDRUpThreadArgument;
 struct ReceiveAliveThreadArgument;
 
 typedef enum
@@ -79,6 +82,8 @@ public:
     bool ConnectToProcess(int process_id);
     bool ConnectToProcessAlive(int process_id);
     bool ConnectToProcessSDR(int process_id);
+    bool ConnectToProcessUp(int process_id);
+    
     void Print();
     void InitializeLocks();
     void CoordinatorMode();
@@ -108,6 +113,7 @@ public:
     void ReceiveCommitFromCoordinator();
     void CreateAliveThreads(vector<pthread_t> &receive_alive_thread, pthread_t &send_alive_thread);
     void CreateSDRThread(int process_id, pthread_t &sdr_receive_thread);
+    void CreateUpThread(int process_id, pthread_t &up_receive_thread);
     void UpdateUpSet(std::unordered_set<int> &alive_processes);
     void RemoveFromUpSet(int);
     void ConstructUpSet();
@@ -118,11 +124,16 @@ public:
     void ThreeWayHandshake();
     void WaitForInit3PC();
 
-
+    void SendUpReqToAll();
+    void SendMyUp(int pid_other);
+    void ConstructUpReq(string &msg);
+    void ConstructUpResponse(string &msg);
+    
 
     void CloseFDs();
     void CloseAliveFDs();
     void CloseSDRFDs();
+    void CloseUpFDs();
 
 
     void Recovery();
@@ -156,10 +167,12 @@ public:
     vector<string> get_log();
     int get_pid();
     int get_fd(int process_id);
+    int get_up_fd(int process_id); 
     int get_alive_fd(int process_id);
     int get_sdr_fd(int process_id);
     void set_pid(int process_id);
     void set_fd(int process_id, int new_fd);
+    void set_up_fd(int process_id, int new_fd); 
     void set_alive_fd(int process_id, int new_fd);
     void set_sdr_fd(int process_id, int new_fd);
     void set_log_file(string logfile);
@@ -180,8 +193,8 @@ public:
     void Close_server_sockfd();
     void reset_fd(int process_id);
     void reset_alive_fd(int process_id);
+    void reset_up_fd(int process_id);
     void reset_sdr_fd(int process_id);
-
 
 
     // list of processes operational for a transaction (and hence, an iteration of 3PC)
@@ -200,7 +213,8 @@ public:
     bool new_coord_thread_made;
 
     vector<ReceiveAliveThreadArgument*> rcv_alive_thread_arg;
-    ReceiveSDRThreadArgument *rcv_sdr_thread_arg;
+    // ReceiveSDRThreadArgument *rcv_sdr_thread_arg;
+
 
 private:
     int pid_;
@@ -216,7 +230,9 @@ private:
     // socket fd for each process corresponding to alive connection
     std::vector<int> alive_fd_;
     std::vector<int> sdr_fd_;
+    std::vector<int> up_fd_;
 
+    map< int, unordered_set<int> > all_up_sets_;
     // state of each process
     // for use by coordinator
     ProcessState my_state_;     // processes self-state
@@ -272,6 +288,14 @@ struct ReceiveDecThreadArgument
     ReceivedMsgType received_msg_type;
 };
 
+struct ReceiveUpThreadArgument
+{
+    Process *p;
+    int pid;
+    int transaction_id;
+    unordered_set<int> up;
+    ReceivedMsgType received_msg_type;
+};
 
 struct ReceiveAliveThreadArgument
 {
@@ -279,10 +303,12 @@ struct ReceiveAliveThreadArgument
     int pid_from_whom;
 };
 
-struct ReceiveSDRThreadArgument
+struct ReceiveSDRUpThreadArgument
 {
     Process *p;
-    int pid_to_whom;
+    int for_whom;
 };
+
+
 
 #endif //PROCESS_H

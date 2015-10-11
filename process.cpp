@@ -15,6 +15,7 @@ using namespace std;
 pthread_mutex_t fd_lock;
 extern pthread_mutex_t up_lock;
 pthread_mutex_t alive_fd_lock;
+pthread_mutex_t up_fd_lock;
 pthread_mutex_t sdr_fd_lock;
 ReceivedMsgType received_msg_type;
 pthread_mutex_t log_lock;
@@ -106,16 +107,16 @@ void Process::Initialize(int pid,
     fd_.clear();
     alive_fd_.clear();
     sdr_fd_.clear();
+    up_fd_.clear();
     thread_set.clear();
     up_.clear();
     participants_.clear();
     participant_state_map_.clear();
 
-
     fd_.resize(N, -1);
     alive_fd_.resize(N, -1);
     sdr_fd_.resize(N, -1);
-
+    up_fd_.resize(N, -1);
     transaction_id_ = -1;
     my_state_ = UNINITIALIZED;
     newcoord_thread = 0;
@@ -180,12 +181,28 @@ void Process::set_fd(int process_id, int new_fd) {
     pthread_mutex_unlock(&fd_lock);
 }
 
+void Process::set_up_fd(int process_id, int new_fd) {
+    pthread_mutex_lock(&up_fd_lock);
+    if (up_fd_[process_id] == -1)
+    {
+        up_fd_[process_id] = new_fd;
+    }
+    pthread_mutex_unlock(&up_fd_lock);
+}
+
 void Process::reset_fd(int process_id) {
     // cout<<"P"<<get_pid()<<"reseting"<<process_id<<endl;
     pthread_mutex_lock(&fd_lock);
     close(fd_[process_id]);
     fd_[process_id] = -1;
     pthread_mutex_unlock(&fd_lock);
+}
+
+void Process::reset_up_fd(int process_id){
+    pthread_mutex_lock(&up_fd_lock);
+    close(up_fd_[process_id]);
+    up_fd_[process_id] = -1;
+    pthread_mutex_unlock(&up_fd_lock);
 }
 
 void Process::reset_alive_fd(int process_id) {
@@ -255,6 +272,15 @@ int Process::get_alive_fd(int process_id) {
     pthread_mutex_lock(&alive_fd_lock);
     ret = alive_fd_[process_id];
     pthread_mutex_unlock(&alive_fd_lock);
+    return ret;
+}
+
+int Process::get_up_fd(int process_id) {
+    if (process_id == INT_MAX) return -1;
+    int ret;
+    pthread_mutex_lock(&up_fd_lock);
+    ret = up_fd_[process_id];
+    pthread_mutex_unlock(&up_fd_lock);
     return ret;
 }
 
@@ -438,6 +464,11 @@ void Process::InitializeLocks() {
         pthread_exit(NULL);
     }
 
+    if (pthread_mutex_init(&up_fd_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+
     if (pthread_mutex_init(&log_lock, NULL) != 0) {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
         pthread_exit(NULL);
@@ -492,10 +523,18 @@ void Process::CreateAliveThreads(vector<pthread_t> &receive_alive_threads, pthre
     CreateThread(send_alive_thread, SendAlive, (void *)this);
 }
 
+void Process::CreateUpThread(int process_id, pthread_t &up_receive_thread) {
+    ReceiveSDRUpThreadArgument* rcv_up_thread_arg = new ReceiveSDRUpThreadArgument;
+    rcv_up_thread_arg-> p = this;
+    rcv_up_thread_arg->for_whom = process_id;
+    CreateThread(up_receive_thread, ReceiveUpReq, (void *)rcv_up_thread_arg);
+}
+
+
 void Process::CreateSDRThread(int process_id, pthread_t &sdr_receive_thread) {
-    rcv_sdr_thread_arg = new ReceiveSDRThreadArgument;
+    ReceiveSDRUpThreadArgument* rcv_sdr_thread_arg = new ReceiveSDRUpThreadArgument;
     rcv_sdr_thread_arg-> p = this;
-    rcv_sdr_thread_arg->pid_to_whom = process_id;
+    rcv_sdr_thread_arg->for_whom = process_id;
     CreateThread(sdr_receive_thread, ReceiveStateOrDecReq, (void *)rcv_sdr_thread_arg);
 }
 
@@ -693,16 +732,17 @@ void Process::Recovery()
     }
     cout << endl;
 
+
     for (auto const &p : participants_) {
         if (p == get_pid()) continue;
-        if (ConnectToProcess(p)) {
-            if (ConnectToProcessAlive(p)) {
-                ConnectToProcessSDR(p);
-            } else {
-                //TODO: I don't think we need to do anything special
-                // apart from not adding participant_[i] to the upset.
-                cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << p << endl;
+        if (ConnectToProcess(p))
+        {
+            if(ConnectToProcessSDR(p)){
+                ConnectToProcessUp(p);
             }
+            else
+                cout << "P" << get_pid() << ": Unable to connect sdr to P" << p << endl;
+
         } else {
             //TODO: I don't think we need to do anything special
             // apart from not adding participant_[i] to the upset.
@@ -710,23 +750,31 @@ void Process::Recovery()
         }
     }
 
-    pthread_t send_alive_thread;
-    vector<pthread_t> receive_alive_threads(up_.size());
-    CreateAliveThreads(receive_alive_threads, send_alive_thread);
+    // pthread_t send_alive_thread;
+    // vector<pthread_t> receive_alive_threads(up_.size());
+    // CreateAliveThreads(receive_alive_threads, send_alive_thread);
 
     // one sdr receive thread for each participant, not just those in up_
     // because any participant could ask for Dec Req in future.
     // size = participant_.size()-1 because it contains self
     vector<pthread_t> sdr_receive_threads(participants_.size() - 1);
+    vector<pthread_t> up_receive_threads(participants_.size() - 1);
     int i = 0;
     for (auto it = participants_.begin(); it != participants_.end(); ++it) {
         //make sure you don't create a SDR receive thread for self
         if (*it == get_pid()) continue;
         CreateSDRThread(*it, sdr_receive_threads[i]);
+        CreateUpThread(*it, up_receive_threads[i]);
         i++;
     }
 
     string decision = GetDecision();
+
+    // sleep(2);
+
+    // sleep(100);
+
+
 
     //probably need to send the decision to others
 
@@ -745,6 +793,10 @@ void Process::Recovery()
     else if (decision == "precommit")
     {
         my_state_ = COMMITTABLE;
+        
+        CreateThread();
+
+        SendUpReqToAll();
         DecisionRequest();
     }
 
@@ -1164,6 +1216,14 @@ void Process::SendPrevDecision(int recp, int tid)
         cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
     }
 }
+void Process::CloseUpFDs()
+{
+    for (auto it = up_fd_.begin(); it != up_fd_.end(); it++)
+    {
+        if ((*it) != -1)
+            close(*it);
+    }
+}
 
 void Process::CloseFDs()
 {
@@ -1205,4 +1265,6 @@ vector<string> split(string s, char delimiter)
     }
     return rval;
 }
+
+
 

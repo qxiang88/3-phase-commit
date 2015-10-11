@@ -12,9 +12,13 @@ std::vector<int> Controller::listen_port_;
 std::vector<int> Controller::send_port_;
 std::vector<int> Controller::alive_port_;
 std::vector<int> Controller::sdr_port_;
+std::vector<int> Controller::up_port_;
+
 std::map<int, int> Controller::send_port_pid_map_;
 std::map<int, int> Controller::alive_port_pid_map_;
 std::map<int, int> Controller::sdr_port_pid_map_;
+std::map<int, int> Controller::up_port_pid_map_;
+
 std::vector<string> Controller::transaction_;
 
 pthread_mutex_t coordinator_lock;
@@ -44,6 +48,9 @@ int Controller::get_alive_port(int process_id) {
 int Controller::get_sdr_port(int process_id) {
     return sdr_port_[process_id];
 }
+int Controller::get_up_port(int process_id) {
+    return up_port_[process_id];
+}
 // returns -1 if there is no entry for port_num in send_port_pid_map_
 // otherwise returns the pid
 int Controller::get_send_port_pid_map(int port_num) {
@@ -60,6 +67,13 @@ int Controller::get_alive_port_pid_map(int port_num) {
         return -1;
     else
         return alive_port_pid_map_[port_num];
+}
+
+int Controller::get_up_port_pid_map(int port_num) {
+    if (up_port_pid_map_.find(port_num) == up_port_pid_map_.end())
+        return -1;
+    else
+        return up_port_pid_map_[port_num];
 }
 
 int Controller::get_sdr_port_pid_map(int port_num) {
@@ -115,6 +129,11 @@ bool Controller::ReadConfigFile() {
             sdr_port_.push_back(port);
             sdr_port_pid_map_.insert(make_pair(port, i));
         }
+        for (int i = 0; i < N; ++i) {
+            fin >> port;
+            up_port_.push_back(port);
+            up_port_pid_map_.insert(make_pair(port, i));
+        }
         fin.close();
 
         return true;
@@ -149,6 +168,7 @@ void Controller::IncrementPorts(int p) {
     int old_send = send_port_[p];
     int old_alive = alive_port_[p];
     int old_sdr = sdr_port_[p];
+    int old_up = up_port_[p];
 
 
     auto it1 = send_port_pid_map_.find(old_send);
@@ -163,10 +183,15 @@ void Controller::IncrementPorts(int p) {
     sdr_port_pid_map_.erase(it3);
     sdr_port_pid_map_.insert(make_pair(old_sdr + 1, p));
 
+    auto it4 = up_port_pid_map_.find(old_up);
+    up_port_pid_map_.erase(it2);
+    up_port_pid_map_.insert(make_pair(old_up + 1, p));
+
     listen_port_[p]++;
     send_port_[p]++;
     alive_port_[p]++;
     sdr_port_[p]++;
+    up_port_[p]++;
 }
 
 bool Controller::ResurrectProcess(int process_id) {
@@ -216,6 +241,7 @@ string Controller::get_transaction(int transaction_id) {
 void Controller::KillProcess(int process_id) {
     process_[process_id].CloseFDs();
     process_[process_id].CloseSDRFDs();
+    process_[process_id].CloseUpFDs();
     process_[process_id].CloseAliveFDs();
     process_[process_id].Close_server_sockfd();
     for (const auto &th : process_[process_id].thread_set) {

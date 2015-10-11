@@ -225,7 +225,13 @@ void* server(void* _p) {
                 // << p->get_alive_port_pid_map(incoming_port) << endl;
             } else {
                 process_id = p->get_sdr_port_pid_map(incoming_port);
+                if(process_id!=-1){
                 p->set_sdr_fd(process_id, new_fd);
+                } else{
+                    process_id = p->get_up_port_pid_map(incoming_port);
+                    p->set_up_fd(process_id, new_fd);
+
+                }
                 // cout << "P" << p->get_pid() << ": Server: accepting SDR connection from P"
                 // << p->get_sdr_port_pid_map(incoming_port) << endl;
             }
