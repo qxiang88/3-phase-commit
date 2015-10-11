@@ -25,7 +25,8 @@ pthread_mutex_t new_coord_lock;
 pthread_mutex_t state_req_lock;
 pthread_mutex_t my_coord_lock;
 pthread_mutex_t my_state_lock;
-
+pthread_mutex_t num_messages_lock;
+pthread_mutex_t resume_lock;
 
 
 void Process::ThreeWayHandshake() {
@@ -66,7 +67,6 @@ void* ThreadEntry(void* _p) {
         }
         else {
             p->ThreeWayHandshake();
-            // cout<<"P"<<p->get_pid()<<p->get_my_status()<<endl;
             // if my_status_ is DONE, it means it completed prev transaction
             // so, it enters normal modes
 
@@ -113,20 +113,24 @@ void Process::Initialize(int pid,
     sdr_fd_.clear();
     up_fd_.clear();
     thread_set.clear();
+    thread_set_alive_.clear();
     up_.clear();
     participants_.clear();
     participant_state_map_.clear();
-
+    rcv_alive_thread_arg.clear();
     fd_.resize(N, -1);
     alive_fd_.resize(N, -1);
     sdr_fd_.resize(N, -1);
     up_fd_.resize(N, -1);
+
     transaction_id_ = -1;
     my_state_ = UNINITIALIZED;
     newcoord_thread = 0;
     state_req_in_progress = false;
     new_coord_thread_made = false;
     server_sockfd_ = -1;
+    num_messages_ = INT_MAX;
+    resume_ = false;
     handshake_ = BLANK;
 }
 
@@ -135,6 +139,7 @@ void Process::Reset(int coord_id) {
 
     log_.clear();
     up_.clear();
+    thread_set_alive_.clear();
     participants_.clear();
     participant_state_map_.clear();
 
@@ -143,6 +148,8 @@ void Process::Reset(int coord_id) {
     newcoord_thread = 0;
     new_coord_thread_made = false;
     state_req_in_progress = false;
+    num_messages_ = INT_MAX;
+    resume_ = false;
     handshake_ = BLANK;
 }
 
@@ -177,12 +184,14 @@ void Process::Close_server_sockfd() {
 // TODO: remember to set _fd_ to -1 on connection close
 // saves socket fd for connection from a send port
 void Process::set_fd(int process_id, int new_fd) {
+    cout << "P" << get_pid() << ": for P" << process_id << ": old=" << get_fd(process_id);
     pthread_mutex_lock(&fd_lock);
     if (fd_[process_id] == -1)
     {
         fd_[process_id] = new_fd;
     }
     pthread_mutex_unlock(&fd_lock);
+    cout << ": new=" << get_fd(process_id) << endl;
 }
 
 void Process::set_up_fd(int process_id, int new_fd) {
@@ -339,11 +348,43 @@ Handshake Process::get_handshake() {
     return handshake_;
 }
 
+int Process::get_num_messages() {
+    int num;
+    pthread_mutex_lock(&num_messages_lock);
+    num = num_messages_;
+    pthread_mutex_unlock(&num_messages_lock);
+    return num;
+}
+
+void Process::set_num_messages(int num) {
+    pthread_mutex_lock(&num_messages_lock);
+    num_messages_ = num;
+    pthread_mutex_unlock(&num_messages_lock);
+}
+
+void Process::DecrementNumMessages() {
+    set_num_messages(get_num_messages() - 1);
+}
+
+bool Process::get_resume() {
+    int res;
+    pthread_mutex_lock(&resume_lock);
+    res = resume_;
+    pthread_mutex_unlock(&resume_lock);
+    return res;
+}
+
+void Process::set_resume(bool res) {
+    pthread_mutex_lock(&resume_lock);
+    resume_ = res;
+    pthread_mutex_unlock(&resume_lock);
+}
+
 // print function for debugging purposes
 void Process::Print() {
     cout << "pid=" << get_pid() << " ";
     for (int i = 0; i < N; ++i) {
-        cout << fd_[i] << ",";
+        cout << get_fd(i) << ",";
     }
     cout << endl;
 }
@@ -353,9 +394,19 @@ void Process::AddThreadToSet(pthread_t thread) {
     thread_set.insert(thread);
 }
 
+// adds the pthread_t entry to the thread_set_alive_
+void Process::AddThreadToSetAlive(pthread_t thread) {
+    thread_set_alive_.insert(thread);
+}
+
 // removes the pthread_t entry from the thread_set
 void Process::RemoveThreadFromSet(pthread_t thread) {
     thread_set.erase(thread);
+}
+
+// removes the pthread_t entry from the thread_set_alive_
+void Process::RemoveThreadFromSetAlive(pthread_t thread) {
+    thread_set_alive_.erase(thread);
 }
 
 // reads the playlist file
@@ -378,6 +429,20 @@ bool Process::LoadPlaylist() {
         cout << e.what() << endl;
         if (fin.is_open()) fin.close();
         return false;
+    }
+}
+
+// returns immediately if resume_ is true
+// if resume is false, waits till num_messages_ is positive
+void Process::WaitOrProceed() {
+    if (get_resume()) {
+        return; // if resume is true, then ignore num_messages_ and let 3PC run
+    } else {
+        // resume is false. Check value of num_messages_
+        // waits till num_messages_ is positive
+        while (get_num_messages() <= 0) {
+            usleep(kMiniSleep);
+        }
     }
 }
 
@@ -429,8 +494,8 @@ void Process::Vote(string trans) {
 // works for following message bodies
 // msg_body = ABORT,
 // outputs constructed msg in msg
-void Process::ConstructGeneralMsg(const string &msg_body,
-                                  const int transaction_id, string &msg) {
+void Process::ConstructGeneralMsg(const string & msg_body,
+                                  const int transaction_id, string & msg) {
     msg = msg_body + " " + to_string(transaction_id) + " $" ;
 }
 
@@ -438,7 +503,7 @@ void Process::ConstructGeneralMsg(const string &msg_body,
 void Process::SendAbortToProcess(int process_id) {
     string msg;
     ConstructGeneralMsg(kAbort, transaction_id_, msg);
-
+    WaitOrProceed();
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
         RemoveFromUpSet(process_id);
@@ -446,12 +511,13 @@ void Process::SendAbortToProcess(int process_id) {
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << process_id << ": " << msg << endl;
     }
+    DecrementNumMessages();
 }
 
 // takes as input the received_msg
 // extracts the core message body from it to extracted_msg
 // extracts transaction id in the received_msg to received_tid
-void Process::ExtractMsg(const string &received_msg, string &extracted_msg, int &received_tid) {
+void Process::ExtractMsg(const string & received_msg, string & extracted_msg, int &received_tid) {
     std::istringstream iss(received_msg);
     iss >> extracted_msg;
     iss >> received_tid;
@@ -498,6 +564,23 @@ void Process::InitializeLocks() {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
         pthread_exit(NULL);
     }
+
+    if (pthread_mutex_init(&num_messages_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+
+    if (pthread_mutex_init(&resume_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+}
+
+// kills all alive threads
+void Process::KillAliveThreads() {
+    for (const auto &th : thread_set_alive_) {
+        pthread_cancel(th);
+    }
 }
 
 // creates a new thread with passed
@@ -508,6 +591,17 @@ void Process::CreateThread(pthread_t &thread, void* (*f)(void* ), void* arg) {
         pthread_exit(NULL);
     }
     AddThreadToSet(thread);
+}
+
+// Especially for alive threads
+// creates a new alive thread with passed
+// adds the new alive thread to the alive_thread set
+void Process::CreateThreadForAlive(pthread_t &thread, void* (*f)(void* ), void* arg) {
+    if (pthread_create(&thread, NULL, f, arg)) {
+        cout << "P" << get_pid() << ": ERROR: Unable to create thread" << endl;
+        pthread_exit(NULL);
+    }
+    AddThreadToSetAlive(thread);
 }
 
 // creates one receive alive thread
@@ -526,11 +620,11 @@ void Process::CreateAliveThreads(vector<pthread_t> &receive_alive_threads, pthre
         rcv_alive_thread_arg[i] = new ReceiveAliveThreadArgument;
         rcv_alive_thread_arg[i]->p = this;
         rcv_alive_thread_arg[i]->pid_from_whom = *it;
-        CreateThread(receive_alive_threads[i], ReceiveAlive, (void *)rcv_alive_thread_arg[i]);
+        CreateThreadForAlive(receive_alive_threads[i], ReceiveAlive, (void *)rcv_alive_thread_arg[i]);
         i++;
     }
     // CreateThread(receive_alive_thread, ReceiveAlive, (void *)this);
-    CreateThread(send_alive_thread, SendAlive, (void *)this);
+    CreateThreadForAlive(send_alive_thread, SendAlive, (void *)this);
 }
 
 void Process::CreateUpThread(int process_id, pthread_t &up_receive_thread) {
@@ -740,7 +834,7 @@ void Process::Recovery()
     LoadLogAndPrevDecisions();
 
     LoadTransactionId();
-    if(transaction_id_==-1)
+    if (transaction_id_ == -1)
         return;
 
     LoadParticipants();
@@ -798,16 +892,16 @@ void Process::Recovery()
     //probably need to send the decision to others
 
     if (decision == "commit")
-        {
-            my_state_ = COMMITTED;
-            cout<<"Had received commit"<<endl;
-        }
+    {
+        my_state_ = COMMITTED;
+        cout << "Had received commit" << endl;
+    }
 
     else if (decision == "abort")
-        {
-            my_state_ = ABORTED;
-            cout<<"Had received abort"<<endl;
-        }
+    {
+        my_state_ = ABORTED;
+        cout << "Had received abort" << endl;
+    }
 
     else if (decision == "precommit")
     {
@@ -834,19 +928,18 @@ void Process::Recovery()
         string vote = GetVote();
         if (vote == "yes")
         {
-            cout<<"Had voted yes"<<endl;
+            cout << "Had voted yes" << endl;
             my_state_ = UNCERTAIN;
             SetUpAndWaitRecovery();
             LogCommitOrAbort();
         }
         else if (vote.empty())
         {
-            cout<<"Hadnt voted. So aborting"<<endl;
+            cout << "Hadnt voted. So aborting" << endl;
             my_state_ = ABORTED;
             LogAbort();
         }
     }
-
 
 }
 
@@ -886,11 +979,13 @@ void Process::Timeout()
 
 void Process::WaitForDecisionResponse() {
     int n = participants_.size();
-    std::vector<pthread_t> receive_thread(n);
+    std::vector<pthread_t> receive_thread(n - 1);
 
-    ReceiveDecThreadArgument **rcv_thread_arg = new ReceiveDecThreadArgument*[n];
+    ReceiveDecThreadArgument **rcv_thread_arg = new ReceiveDecThreadArgument*[n - 1];
     int i = 0;
     for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
+        if (*it == get_pid()) continue;
+
         rcv_thread_arg[i] = new ReceiveDecThreadArgument;
         rcv_thread_arg[i]->p = this;
         rcv_thread_arg[i]->pid = *it;
@@ -905,6 +1000,8 @@ void Process::WaitForDecisionResponse() {
 
     i = 0;
     for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
+        if (*it == get_pid()) continue;
+
         pthread_join(receive_thread[i], &status);
         RemoveThreadFromSet(receive_thread[i]);
         if(get_my_state()==COMMITTED || get_my_state()==ABORTED)
@@ -954,12 +1051,12 @@ void* ReceiveDecision(void* _rcv_thread_arg)
         } else {
             buf[num_bytes] = '\0';
             cout << "P" << p->get_pid() << ": DecMsg received from P" << pid << ": ";
-            if(buf[0]=='0')
-                cout<<"Abort"<<endl;
-            else if(buf[1]=='1')
-                cout<<"Commit"<<endl;
+            if (buf[0] == '0')
+                cout << "Abort" << endl;
+            else if (buf[1] == '1')
+                cout << "Commit" << endl;
             else
-                cout<<buf<<endl;
+                cout << buf << endl;
 
             string extracted_msg;
             int received_tid;
@@ -994,18 +1091,22 @@ void* SendDecReq(void *_p) {
     return NULL;
 }
 
-void Process::SendDecReqToAll(const string &msg) {
+void Process::SendDecReqToAll(const string & msg) {
 
     //this only contains operational processes for non timeout cases
     for ( auto it = participants_.begin(); it != participants_.end(); ++it ) {
         if ((*it) == get_pid()) continue; // do not send to self
+        cout << "P" << get_pid() << ": sdr_fd for P" << (*it) << "=" << get_sdr_fd(*it) << endl;
+        WaitOrProceed();
         if (send(get_sdr_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR1: sending to P" << (*it) << endl;
-            RemoveFromUpSet(*it);
+            // RemoveFromUpSet(*it);
+            // no need to update up set
         }
         else {
             // cout << "P" << get_pid() << ": Msg sent to P" << (*it) << ": " << msg << endl;
         }
+        DecrementNumMessages();
     }
 }
 
@@ -1137,9 +1238,9 @@ void Process::TerminationProtocol()
 
         SendURElected(get_my_coordinator());
         usleep(kGeneralTimeout);
-        
+
         bool temp_sr = false;
-        
+
         pthread_mutex_lock(&state_req_lock);
         temp_sr = state_req_in_progress;
         pthread_mutex_unlock(&state_req_lock);
@@ -1180,16 +1281,20 @@ bool Process::SendURElected(int recp)
     string msg;
     string msg_to_send = kURElected;
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    bool ret;
+
+    WaitOrProceed();
     if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
         RemoveFromUpSet(recp);
-        return false;
+        ret = false;
     }
     else {
         cout << "P" << get_pid() << ": URElected Msg sent to P" << recp << ": " << msg << endl;
-        return true;
+        ret = true;
     }
-
+    DecrementNumMessages();
+    return ret;
 }
 
 int Process::GetNewCoordinator()
@@ -1302,10 +1407,10 @@ void Process::SendState(int recp)
     string msg;
     string msg_to_send = to_string((int)my_state_);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    cout<<"trying to send st to "<<recp<<endl;
+    // cout << "trying to send st to " << recp << endl;
     if (recp == INT_MAX)
         return;
-
+    WaitOrProceed();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
         RemoveFromUpSet(recp);
@@ -1313,6 +1418,7 @@ void Process::SendState(int recp)
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
     }
+    DecrementNumMessages();
 }
 
 void Process::SendDecision(int recp)
@@ -1325,14 +1431,18 @@ void Process::SendDecision(int recp)
         code_to_send = ABORT;
     string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    // cout << get_fd(recp) << " " << recp << endl;
+    cout << get_fd(recp) << " " << recp << endl;
+    WaitOrProceed();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << endl;
+        timeval aftertime;
+        gettimeofday(&aftertime, NULL);
+        cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
         RemoveFromUpSet(recp);
     }
     else {
         // cout << "P" << get_pid() << ": decision Msg sent to P" << recp << ": " << msg << endl;
     }
+    DecrementNumMessages();
 }
 
 void Process::SendPrevDecision(int recp, int tid)
@@ -1341,6 +1451,7 @@ void Process::SendPrevDecision(int recp, int tid)
     int code_to_send = prev_decisions_[tid];
     string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    WaitOrProceed();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
         RemoveFromUpSet(recp);
@@ -1348,6 +1459,7 @@ void Process::SendPrevDecision(int recp, int tid)
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
     }
+    DecrementNumMessages();
 }
 void Process::CloseUpFDs()
 {

@@ -40,7 +40,9 @@ void Process::ConstructStateReq(string &msg) {
 void Process::SendVoteReqToAll(const string &msg) {
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
+        cout << "P" << get_pid() << ": fd for" << it->first << "=" << get_fd(it->first) << endl;
 
+        WaitOrProceed();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -48,6 +50,7 @@ void Process::SendVoteReqToAll(const string &msg) {
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
         }
+        DecrementNumMessages();
     }
 }
 
@@ -56,6 +59,7 @@ void Process::SendStateReqToAll(const string &msg) {
     //this only contains operational processes for non timeout cases
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
+        WaitOrProceed();
         if (send(get_sdr_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -63,6 +67,7 @@ void Process::SendStateReqToAll(const string &msg) {
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
         }
+        DecrementNumMessages();
     }
 }
 
@@ -191,7 +196,7 @@ void Process::SendPreCommitToAll() {
     ConstructGeneralMsg(kPreCommit, transaction_id_, msg);
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
-
+        WaitOrProceed();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -199,13 +204,14 @@ void Process::SendPreCommitToAll() {
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
         }
+        DecrementNumMessages();
     }
 }
 
 void Process::SendPreCommitToProcess(int process_id) {
     string msg;
     ConstructGeneralMsg(kPreCommit, transaction_id_, msg);
-
+    WaitOrProceed();
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
         RemoveFromUpSet(process_id);
@@ -213,6 +219,7 @@ void Process::SendPreCommitToProcess(int process_id) {
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << process_id << ": " << msg << endl;
     }
+    DecrementNumMessages();
 }
 
 
@@ -222,7 +229,7 @@ void Process::SendCommitToAll() {
     ConstructGeneralMsg(kCommit, transaction_id_, msg);
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
-
+        WaitOrProceed();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -230,6 +237,7 @@ void Process::SendCommitToAll() {
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
         }
+        DecrementNumMessages();
     }
 }
 
@@ -437,7 +445,7 @@ void Process::CoordinatorMode() {
     //TODO: increment it
     //TODO: send it to ConstructVoteReq;
 
-    for (const auto &pm: participant_state_map_) {
+    for (const auto &pm : participant_state_map_) {
         if (pm.first == get_pid()) continue;
         if (ConnectToProcess(pm.first)) 
         {// setup alive connection to this process
@@ -458,37 +466,41 @@ void Process::CoordinatorMode() {
                 cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << pm.first << endl;
             }
         } else {
-                cout << "P" << get_pid() << ": Unable to connect to P" << pm.first << endl;
+            cout << "P" << get_pid() << ": Unable to connect to P" << pm.first << endl;
         }
     }
     usleep(kGeneralSleep); //sleep to make sure connections are established
 
-    pthread_t send_alive_thread;
-    vector<pthread_t> receive_alive_threads(up_.size());
-
-    // one sdr receive thread for each participant, not just those in up_
-    // because any participant could ask for Dec Req in future.
-    // size = participant_state_map_.size() because it does not contain self
-    vector<pthread_t> sdr_receive_threads(participant_state_map_.size());
-    vector<pthread_t> up_receive_threads(participant_state_map_.size());
-    int i = 0;
-    for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it) {
-        //make sure you don't create a SDR receive thread for self
-        if (it->first == get_pid()) continue;
-        CreateSDRThread(it->first, sdr_receive_threads[i]);
-        CreateUpThread(it->first, sdr_receive_threads[i]);
-        i++;
+    // create SDR threads only for the first transaction
+    // because they will keep on running forever.
+    if (transaction_id_ == 0) {
+        // one sdr receive thread for each participant, not just those in up_
+        // because any participant could ask for Dec Req in future.
+        // size = participant_state_map_.size() because it does not contain self
+        vector<pthread_t> sdr_receive_threads(participant_state_map_.size());
+        vector<pthread_t> up_receive_threads(participant_state_map_.size());
+        int i = 0;
+        for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it) {
+            //make sure you don't create a SDR receive thread for self
+            if (it->first == get_pid()) continue;
+            CreateSDRThread(it->first, sdr_receive_threads[i]);
+            CreateUpThread(it->first, sdr_receive_threads[i]);
+            i++;
+        }
     }
 
     string msg;
     ConstructVoteReq(msg);
-    SendVoteReqToAll(msg);
     LogStart();
     LogUp();
+    SendVoteReqToAll(msg);
+
+    pthread_t send_alive_thread;
+    vector<pthread_t> receive_alive_threads(up_.size());
 
     CreateAliveThreads(receive_alive_threads, send_alive_thread);
-    WaitForVotes();
 
+    WaitForVotes();
     string trans = get_transaction(transaction_id_);
     //TODO: Handle case when trans = "NULL". See also ConstructVoteReq same cases
     Vote(trans); //coordinator's self vote
@@ -517,11 +529,9 @@ void Process::CoordinatorMode() {
     } else {
 
         LogPreCommit();
-
-        return; 
-
         SendPreCommitToAll();
         WaitForAck();
+        // return;
         LogCommit();
         my_state_ = COMMITTED;
         SendCommitToAll();
@@ -582,6 +592,7 @@ void* NewCoordinatorMode(void * _p) {
             p->SendAbortToProcess(ps.first);
         }
         p->set_my_state(ABORTED);
+        p->RemoveThreadFromSet(pthread_self());
         return NULL;
     }
 
@@ -603,13 +614,14 @@ void* NewCoordinatorMode(void * _p) {
         }
         p->SendCommitToAll();
         p->set_my_state(COMMITTED);
+        p->RemoveThreadFromSet(pthread_self());
         return NULL;
     }
 
 
     bool uncert = true;
     for (const auto& ps : p->participant_state_map_) {
-        if(ps.second==PROCESSTIMEOUT)continue;
+        if (ps.second == PROCESSTIMEOUT)continue;
         if (ps.second != UNCERTAIN)
         {
             uncert = false;
@@ -624,6 +636,7 @@ void* NewCoordinatorMode(void * _p) {
             p->SendAbortToProcess(ps.first);
         }
         p->set_my_state(ABORTED);
+        p->RemoveThreadFromSet(pthread_self());
         return NULL;
     }
 
@@ -644,5 +657,6 @@ void* NewCoordinatorMode(void * _p) {
     else
         p->prev_decisions_.push_back(COMMIT);
 
+    p->RemoveThreadFromSet(pthread_self());
     return NULL;
 }

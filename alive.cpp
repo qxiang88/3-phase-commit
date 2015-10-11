@@ -37,6 +37,7 @@ void Process::RemoveFromUpSet(int k) {
         LogUp();
 
     if (k != INT_MAX) {
+        cout<<"~~~~"<<endl;
         reset_fd(k);
         reset_alive_fd(k);
         reset_sdr_fd(k);
@@ -82,6 +83,7 @@ bool Process::ConnectToProcessAlive(int process_id) {
             perror("setsockopt ERROR");
             exit(1);
         }
+
 
         if (bind(sockfd, l->ai_addr, l->ai_addrlen) == -1) {
             close(sockfd);
@@ -146,6 +148,9 @@ bool Process::ConnectToProcessAlive(int process_id) {
     return true;
 }
 
+
+
+
 // thread for receiveing ALIVE messages from other processes
 void* ReceiveAlive(void *_rcv_thread_arg) {
     // cout<<"receive alive entered"<<endl;
@@ -162,65 +167,78 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
     int num_bytes;
     set<string> buffered_alives;
 
-    while (true) {
-        string alive_to_check = "ALIVE" + to_string(time(NULL) % 100);
-        usleep(kReceiveAliveTimeout);
+    outf << "P" << p->get_pid() << "Alive thread up for P" << pid << " at " << time(NULL) % 100 << endl;
 
-        // int rv = select(fd_max + 1, &temp_set, NULL, NULL, &zero);
-        int rv = 0;
-        if (rv == -1) {
-            cout << "P" << p->get_pid() << ": ERROR in select() in Alive receive" << endl;
-            // pthread_exit(NULL);
+    int start_time = time(NULL) % 100;
+    while (true) {
+        string alive_to_check = "ALIVE" + to_string(start_time);
+        timeval beforetime, aftertime;
+        // errno = 0;
+        gettimeofday(&beforetime, NULL);
+        // outf << "before receive t=" << beforetime.tv_sec << "," << beforetime.tv_usec << endl;
+        num_bytes = recv(p->get_alive_fd(pid), buf, kMaxDataSize - 1, 0);
+        gettimeofday(&aftertime, NULL);
+        if (num_bytes == -1 )
+        {
+            // cout << "P" << p->get_pid() << ": ERROR in receiving ALIVE -1 for P" << pid << " " << endl;
+            // outf << "P" << p->get_pid() << ": ERROR in receiving ALIVE -1 for P" << pid << " " << p->get_alive_fd(pid) << "errno=" << (errno) << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
+            // if (errno == EAGAIN) outf << "found" << endl;
+            p->RemoveFromUpSet(pid);
+            p->RemoveThreadFromSetAlive(pthread_self());
+            return NULL;
+        }
+        else if ( num_bytes == 0)
+        {
+            // cout << "P" << p->get_pid() << ": ERROR in receiving ALIVE 0 for P" << pid << " " << endl;
+             // outf << "P" << p->get_pid() << ": ERROR in receiving ALIVE 0 for P" << pid << " " << p->get_alive_fd(pid) << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
+            p->RemoveFromUpSet(pid);
+            p->RemoveThreadFromSetAlive(pthread_self());
+            return NULL;
+            // pthread_exit(NULL); //TODO: think about whether it should be exit or not
         }
         else
         {
-            num_bytes = recv(p->get_alive_fd(pid), buf, kMaxDataSize - 1, 0);
-            if (num_bytes == -1 || num_bytes == 0)
+            buf[num_bytes] = '\0';
+            outf << "P" << p->get_pid() << ": ALIVE received from P" << pid << ": "  << buf << " at " << time(NULL) % 100 << endl;
+            // outf << "P" << p->get_pid() << ": ALIVE received from P" << pid << ": "  << buf << " at " << time(NULL) % 100 <<  " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
+
+            string bufstring(buf);
+
+            vector<string> all_msgs = split(bufstring, ' ');
+            // outf << "P:" << p->get_pid() << " All msgs size=" << all_msgs.size() << endl;
+            for (auto iter = all_msgs.begin(); iter != all_msgs.end(); iter++)
             {
-                // cout << "P" << p->get_pid() << ": ERROR in receiving ALIVE for P" << pid << endl;
-                p->RemoveFromUpSet(pid);
-                return NULL;
-                // pthread_exit(NULL); //TODO: think about whether it should be exit or not
-            }
-            else
-            {
-                buf[num_bytes] = '\0';
-                outf << "P" << p->get_pid() << ": ALIVE received from P" << pid << ": "  << buf << " at " << time(NULL) % 100 <<  endl;
-
-                string bufstring(buf);
-
-                vector<string> all_msgs = split(bufstring, ' ');
-                for (auto iter = all_msgs.begin(); iter != all_msgs.end(); iter++)
-                {
-                    buffered_alives.insert(*iter);
-                }
-
-                // cout << p->get_pid() << " looking for " << alive_to_check << " from " << pid << endl;
-
-                // for (auto xit = buffered_alives.begin(); xit != buffered_alives.end(); xit++)
-                //     cout << *xit << " ";
-                // cout << endl;
-
-                set<string>::iterator iter = buffered_alives.find(alive_to_check);
-                if (iter == buffered_alives.end())
-                {
-                    cout << "didnt find " << alive_to_check << " for " << pid << endl;
-                    p->RemoveFromUpSet(pid);
-                    pthread_mutex_lock(&up_lock);
-                    set <int> copy_up(p->up_);
-                    pthread_mutex_unlock(&up_lock);
-                    PrintUpSet(p->get_pid(), copy_up);
-                }
+                buffered_alives.insert(*iter);
             }
         }
 
+        // outf << p->get_pid() << " looking for " << alive_to_check << " from " << pid << endl;
 
+        // for (auto xit = buffered_alives.begin(); xit != buffered_alives.end(); xit++)
+        //     outf << *xit << " ";
+        // outf << endl;
+
+        set<string>::iterator iter = buffered_alives.find(alive_to_check);
+        if (iter == buffered_alives.end())
+        {
+            outf << "didnt find " << alive_to_check << " for " << pid << endl;
+            p->RemoveFromUpSet(pid);
+            pthread_mutex_lock(&up_lock);
+            set <int> copy_up(p->up_);
+            pthread_mutex_unlock(&up_lock);
+            PrintUpSet(p->get_pid(), copy_up);
+            p->RemoveThreadFromSetAlive(pthread_self());
+            return NULL;
+        }
+        else
+        {
+            buffered_alives.erase(iter);
+        }
+
+        start_time = (start_time + kReceiveAliveTimeoutTimeval.tv_sec)%100;
+        sleep((beforetime.tv_sec + 2) - aftertime.tv_sec);
     }
 }
-// }
-// }
-// p->UpdateUpSet(alive_processes);
-
 
 // thread for sending ALIVE messages to up_ processes
 //todo: lock
@@ -241,6 +259,7 @@ void* SendAlive(void *_p) {
 
         auto it = up_copy.begin();
         while (it != up_copy.end()) {
+
             if (send(p->get_alive_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
                 // if (errno == ECONNRESET) {  // connection reset by peer
                 //     // cout << "P" << p->get_pid() << ": ALIVE connection reset by P" << (*it) << ". Removing it from UP set" << endl;
@@ -248,12 +267,15 @@ void* SendAlive(void *_p) {
                 //     //TODO: Hopefully, receive will timeout soon
                 //     // and will remove it from UP set
                 // } else {
-                // cout << "P" << p->get_pid() << ": ERROR: sending ALIVE to P" << (*it) << endl;
+                cout << "P" << p->get_pid() << ": ERROR: sending ALIVE to P" << (*it) << endl;
                 it++;
                 // }
             }
             else {
+                timeval timeofday;
+                gettimeofday(&timeofday, NULL);
                 outf << "P" << p->get_pid() << ": ALIVE sent to P" << (*it) << " at " << time(NULL) % 100 << endl;
+                // outf << "P" << p->get_pid() << ": ALIVE sent to P" << (*it) << " at " << time(NULL) % 100 << " t=" << timeofday.tv_sec << "," << timeofday.tv_usec << endl;
                 it++;
             }
         }

@@ -28,6 +28,12 @@ public:
     void InformCoordiantorOfParticipants(int coord_id);
     void ResetProcesses(int coord_id);
     void IncrementPorts(int p);
+    void KillAllProcesses();
+    void KillLeader();
+    void ResurrectAll();
+    void SetMessageCount(int process_id, int num_messages);
+    void PauseProtocol();
+    void ResumeMessages(int process_id);
 
 
 

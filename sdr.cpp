@@ -18,6 +18,7 @@ extern pthread_mutex_t new_coord_lock;
 
 bool Process::ConnectToProcessSDR(int process_id) {
     if (get_sdr_fd(process_id) != -1) return true;
+    cout << get_pid() << " " << process_id << endl;
     int sockfd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *clientinfo, *l;
 
@@ -131,9 +132,15 @@ void* ReceiveStateOrDecReq(void* _arg) {
         // currently, this loop sleeps at the end for kGeneralSleep
         // TODO: confirm whether this is the right amount of sleep
         // cout<<"$$$$P"<<p->get_pid()<<"sdr_fd"<<pid<<p->get_sdr_fd(pid)<<endl;
+        while (p->get_sdr_fd(pid) == -1) {
+            usleep(kMiniSleep);
+        }
+
         if ((num_bytes = recv(p->get_sdr_fd(pid), buf, kMaxDataSize - 1, 0)) == -1)
         {
-            // cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << endl;
+            timeval aftertime;
+            gettimeofday(&aftertime, NULL);
+            cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
             p->RemoveFromUpSet(pid);
             // no need to exit even if there is an error. Hopefully in future, pid will recover
             // and SDRconnect to this process which will set the sdr_fd correctly
@@ -198,10 +205,10 @@ void* ReceiveStateOrDecReq(void* _arg) {
             }
             else if (type_req == kURElected)
             {
-                cout<<"I am elected. my coord was "<<my_coord<<", my id is "<<p->get_pid()<<endl;
+                cout << "I am elected. my coord was " << my_coord << ", my id is " << p->get_pid() << endl;
                 if (my_coord == p->get_pid())
                     continue;
-                if(my_coord<pid)
+                if (my_coord < pid)
                     continue;
 
 
@@ -221,7 +228,9 @@ void* ReceiveStateOrDecReq(void* _arg) {
 
             }
             else { //decreq
-                // cout << "Dec req received " << p->get_my_state() << endl;
+                timeval t;
+                gettimeofday(&t, NULL);
+                outf << "Dec req received; alive= " << p->get_alive_fd(pid) << " sdr=" << p->get_sdr_fd(pid) << "fd=" << p->get_fd(pid) << "at" << t.tv_sec << "," << t.tv_usec << endl;
                 if (recvd_tid == p->get_transaction_id())
                 {
                     if (p->get_my_state() == COMMITTED || p->get_my_state() == ABORTED)
@@ -246,8 +255,10 @@ void* responder(void *_p) {
     p->SendState(p->get_my_coordinator());
     // cout << "sent state to new coord at " << time(NULL) % 100 << endl;
     ProcessState my_st = p->get_my_state();
-    if (!(my_st == UNCERTAIN || my_st == COMMITTABLE))
+    if (!(my_st == UNCERTAIN || my_st == COMMITTABLE)) {
+        p->RemoveThreadFromSet(pthread_self());
         return NULL;
+    }
 
     if (my_st == UNCERTAIN)
     {
@@ -282,6 +293,6 @@ void* responder(void *_p) {
         }
 
     }
-
+    p->RemoveThreadFromSet(pthread_self());
     return NULL;
 }
