@@ -221,7 +221,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
 
             }
             else { //decreq
-                cout << "Dec req received " << p->get_my_state() << endl;
+                // cout << "Dec req received " << p->get_my_state() << endl;
                 if (recvd_tid == p->get_transaction_id())
                 {
                     if (p->get_my_state() == COMMITTED || p->get_my_state() == ABORTED)

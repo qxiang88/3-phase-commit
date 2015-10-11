@@ -17,17 +17,19 @@ extern void* ReceiveVoteFromParticipant(void* _rcv_thread_arg);
 extern void* ReceiveAckFromParticipant(void* _rcv_thread_arg);
 extern void* ReceiveStateFromParticipant(void* _rcv_thread_arg);
 extern void* SendAlive(void *_p);
+extern void* SendUpReq(void *_p);
 extern void* ReceiveAlive(void *_p);
 extern void* ReceiveStateOrDecReq(void *_p);
 extern void* ReceiveUpReq(void* _arg);
+extern void* ReceiveUpSet(void* _rcv_thread_arg);
 extern void* ReceiveDecision(void *_p);
 extern void* NewCoordinatorMode(void *_p);
 extern int return_port_no(struct sockaddr *sa);
 extern void sigchld_handler(int s);
 extern vector<string> split(string s, char delimiter);
-extern void PrintUpSet(int, unordered_set<int>);
-
-extern void* SendUp(void *_p);
+extern void PrintUpSet(int, set<int>);
+extern void* SendDecReq(void *_p);
+extern void* SendUpReq(void *_p);
 
 struct ReceiveSDRUpThreadArgument;
 struct ReceiveAliveThreadArgument;
@@ -104,6 +106,7 @@ public:
     void SendPreCommitToAll();
     void WaitForAck();
     void WaitForDecisionResponse();
+    void WaitForUpResponse();
     void SendCommitToAll();
     bool ExtractFromVoteReq(const string &msg, string &transaction_msg );
     bool WaitForVoteReq(string &transaction_msg);
@@ -114,7 +117,7 @@ public:
     void CreateAliveThreads(vector<pthread_t> &receive_alive_thread, pthread_t &send_alive_thread);
     void CreateSDRThread(int process_id, pthread_t &sdr_receive_thread);
     void CreateUpThread(int process_id, pthread_t &up_receive_thread);
-    void UpdateUpSet(std::unordered_set<int> &alive_processes);
+    void UpdateUpSet(std::set<int> &alive_processes);
     void RemoveFromUpSet(int);
     void ConstructUpSet();
     void SendState(int);
@@ -128,6 +131,10 @@ public:
     void SendMyUp(int pid_other);
     void ConstructUpReq(string &msg);
     void ConstructUpResponse(string &msg);
+    string ConvertUpSetToString();
+    set<int> convertStringToSet(string s);
+    void SetUpAndWaitRecovery();
+
     
 
     void CloseFDs();
@@ -146,7 +153,8 @@ public:
     void WaitForStates();
     void SendDecision(int);
     void SendPrevDecision(int, int);
-
+    bool CheckAliveEqualsIntersection();
+    void TotalFailureCheck();
     void AddToLog(string s, bool new_round = false);
     int GetCoordinator();
     void LoadParticipants();
@@ -163,6 +171,7 @@ public:
     void LogVoteReq();
     void LogStart();
     void LogUp();
+    void LogCommitOrAbort();
 
     vector<string> get_log();
     int get_pid();
@@ -201,7 +210,7 @@ public:
     // operational for an iteration is defined as a process which
     // NEVER failed during that iteration
     // does not include self
-    unordered_set<int> up_;
+    set<int> up_;
 
     // list of processes involved in a transaction (and hence, an iteration of 3PC)
     unordered_set<int> participants_;
@@ -232,7 +241,7 @@ private:
     std::vector<int> sdr_fd_;
     std::vector<int> up_fd_;
 
-    map< int, unordered_set<int> > all_up_sets_;
+    map< int, set<int> > all_up_sets_;
     // state of each process
     // for use by coordinator
     ProcessState my_state_;     // processes self-state
@@ -256,7 +265,7 @@ private:
     //can there be votereq of new process while one 3PC ongoing?
     int my_coordinator_;
     int transaction_id_;
-
+    bool decision_reached_;
 
 
 };
@@ -293,7 +302,7 @@ struct ReceiveUpThreadArgument
     Process *p;
     int pid;
     int transaction_id;
-    unordered_set<int> up;
+    set<int> up;
     ReceivedMsgType received_msg_type;
 };
 

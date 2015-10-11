@@ -2,6 +2,7 @@
 #include "constants.h"
 #include "limits.h"
 #include "fstream"
+#include <assert.h> 
 #include "sstream"
 #include "iostream"
 #include "unistd.h"
@@ -10,6 +11,7 @@
 #include <sys/socket.h>
 #include "sys/time.h"
 #include "sstream"
+#include <algorithm>
 using namespace std;
 
 pthread_mutex_t fd_lock;
@@ -22,6 +24,8 @@ pthread_mutex_t log_lock;
 pthread_mutex_t new_coord_lock;
 pthread_mutex_t state_req_lock;
 pthread_mutex_t my_coord_lock;
+pthread_mutex_t my_state_lock;
+
 
 
 void Process::ThreeWayHandshake() {
@@ -303,12 +307,18 @@ void Process::set_my_status(ProcessRunningStatus status) {
 
 ProcessState Process::get_my_state()
 {
-    return my_state_;
+    ProcessState local;
+    pthread_mutex_lock(&my_state_lock);
+    local = my_state_;
+    pthread_mutex_unlock(&my_state_lock);
+    return local;
 }
 
 void Process::set_my_state(ProcessState state)
 {
+    pthread_mutex_lock(&my_state_lock);
     my_state_ = state;
+    pthread_mutex_unlock(&my_state_lock);
 }
 
 int Process::get_my_coordinator()
@@ -626,7 +636,6 @@ bool Process::CheckCoordinator()
         return false;
 }
 
-
 void Process::LoadUp()
 {
     vector<string> cur_trans_log = log_[transaction_id_];
@@ -709,6 +718,22 @@ int Process::GetCoordinator()
     }
 }
 
+// void Process::set_decision_reached(bool v)
+// {
+//     pthread_mutex_lock(&decision_reached_lock);
+//     decision_reached_ = v;
+//     pthread_mutex_unlock(&decision_reached_lock);
+// }
+// bool Process::get_decision_reached()
+// {
+//     bool v;
+//     pthread_mutex_lock(&decision_reached_lock);
+//     v = decision_reached_;
+//     pthread_mutex_unlock(&decision_reached_lock);
+//     return v;
+// }
+
+
 //sets my_state_ accd to log and calls termination protocol
 void Process::Recovery()
 {
@@ -770,12 +795,6 @@ void Process::Recovery()
 
     string decision = GetDecision();
 
-    // sleep(2);
-
-    // sleep(100);
-
-
-
     //probably need to send the decision to others
 
     if (decision == "commit")
@@ -793,11 +812,21 @@ void Process::Recovery()
     else if (decision == "precommit")
     {
         my_state_ = COMMITTABLE;
-        
-        CreateThread();
+        SetUpAndWaitRecovery();
+        LogCommitOrAbort();
 
-        SendUpReqToAll();
-        DecisionRequest();
+        // bool local_decreached = false;
+        // pthread_mutex_lock(&decision_reached_lock);
+        // set_decision_reached(false);
+        // pthread_mutex_unlock(&decision_reached_lock);
+        // while(!local_decreached)
+        // {
+        //     sleep(kGeneralSleep);
+        //     pthread_mutex_lock(&decision_reached_lock);
+        //     local_decreached = get_decision_reached();
+        //     pthread_mutex_unlock(&decision_reached_lock);
+        // }
+        
     }
 
     else
@@ -807,7 +836,8 @@ void Process::Recovery()
         {
             cout<<"Had voted yes"<<endl;
             my_state_ = UNCERTAIN;
-            DecisionRequest();
+            SetUpAndWaitRecovery();
+            LogCommitOrAbort();
         }
         else if (vote.empty())
         {
@@ -816,11 +846,37 @@ void Process::Recovery()
             LogAbort();
         }
     }
-    cout<<"Decided. My state is ";
-    if(get_my_state()==1)cout<<"Aborted"<<endl;
-    else if(get_my_state()==4)cout<<"Commited"<<endl;
+
 
 }
+
+void Process::SetUpAndWaitRecovery()
+{
+    pthread_t decision_request_thread, total_failure_thread;
+    CreateThread(decision_request_thread, SendDecReq, (void *)this);
+    CreateThread(total_failure_thread, SendUpReq, (void *)this);
+    void* status;
+    pthread_join(decision_request_thread, &status);
+    pthread_join(total_failure_thread, &status);
+    RemoveThreadFromSet(decision_request_thread);
+    RemoveThreadFromSet(total_failure_thread);
+}
+
+void Process::LogCommitOrAbort()
+{
+    cout<<"Decided. My state is ";
+    if(get_my_state()==ABORTED)
+    {
+        LogAbort();
+        cout<<"Aborted"<<endl;
+    }
+    else if(get_my_state()==COMMITTED)
+    {
+        cout<<"Commited"<<endl;
+        LogCommit();
+    }
+}
+
 
 void Process::Timeout()
 {
@@ -833,17 +889,33 @@ void Process::DecisionRequest()
     string msg_to_send = kDecReq;
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     //if total failure, then init termination protocol with total failure. give arg to TP
-    while (!(my_state_ == ABORTED || my_state_ == COMMITTED))
+    ProcessState local_my_state;
+
+    // sleep(15);
+    while (true)
     {
+        cout<<"Starting dec req to all "<<endl;
         SendDecReqToAll(msg);
         WaitForDecisionResponse();
-        if (my_state_ == ABORTED)
-            LogAbort();
-        else if (my_state_ == COMMITTED)
-            LogCommit();
-        //sleep for some time
+        local_my_state = get_my_state();
+
+        if (local_my_state == ABORTED)
+        {
+            break;
+        }
+        else if (local_my_state == COMMITTED)
+        {
+            break;
+        }
         usleep(kDecReqTimeout);
+
     }
+
+    cout<<"Decided. My state is ";
+    if(get_my_state()==1)cout<<"Aborted"<<endl;
+    else if(get_my_state()==4)cout<<"Commited"<<endl;
+
+    return;   
 }
 
 void Process::WaitForDecisionResponse() {
@@ -871,12 +943,12 @@ void Process::WaitForDecisionResponse() {
         RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->decision) == COMMIT)
         {
-            my_state_ = COMMITTED;
+            set_my_state(COMMITTED);
             return;
         }
         else if ((rcv_thread_arg[i]->decision) == ABORT)
         {
-            my_state_ = ABORTED;
+            set_my_state(ABORTED);
             return;
         }
         i++;
@@ -889,6 +961,11 @@ void* ReceiveDecision(void* _rcv_thread_arg)
     int pid = rcv_thread_arg->pid;
     int tid = rcv_thread_arg->transaction_id;
     Process *p = rcv_thread_arg->p;
+
+    ofstream outf("log/decresponse/" + to_string(p->get_pid()) + "from" + to_string(pid));
+
+    if (!outf.is_open())
+        cout << "Failed to open log file for decresponse" << endl;
 
     char buf[kMaxDataSize];
     int num_bytes;
@@ -941,6 +1018,11 @@ void* ReceiveDecision(void* _rcv_thread_arg)
     return NULL;
 }
 
+void* SendDecReq(void *_p) {
+    Process *p = (Process *)_p;
+    p->DecisionRequest();
+    return NULL;
+}
 
 void Process::SendDecReqToAll(const string &msg) {
 
@@ -957,6 +1039,54 @@ void Process::SendDecReqToAll(const string &msg) {
     }
 }
 
+bool Process::CheckAliveEqualsIntersection()
+{
+    assert (all_up_sets_.size()!=0);
+    set<int> intersection_up(up_);
+    set<int> alive_processes_now;
+    for(auto iter = all_up_sets_.begin(); iter!=all_up_sets_.end(); iter++)
+    {
+        set_intersection(intersection_up.begin(),intersection_up.end(),iter->second.begin(),iter->second.end(),
+                  std::inserter(intersection_up,intersection_up.begin()));
+        alive_processes_now.insert(iter->first);
+        // cout<<iter->first<<" ";
+    }
+    // cout<<endl;
+
+    // for(auto it = intersection_up.begin(); it!=intersection_up.end(); it++)
+    //     cout<<*it<<" ";
+    // cout<<endl;
+    return (intersection_up==alive_processes_now);
+}
+
+void Process::TotalFailureCheck()
+{
+    ProcessState local_my_state;
+
+    while (true)
+    {
+        // cout<<"Starting total failure check"<<endl;
+        SendUpReqToAll();
+        WaitForUpResponse();
+        // cout<<"returned to total failure"<<endl;
+        all_up_sets_[get_pid()] = up_; //add mine to allupsets
+        bool is_total_failure = CheckAliveEqualsIntersection();
+        if(!is_total_failure)
+            cout<<"Intersection doesnt match"<<endl;
+
+        local_my_state = get_my_state();
+        
+        if (local_my_state == ABORTED)
+        {
+            break;
+        }
+        else if (local_my_state == COMMITTED)
+        {
+            break;
+        }
+        usleep(kUpReqTimeout);
+    }
+}
 
 void Process::TerminationProtocol()
 {   //called when a process times out.
@@ -1064,7 +1194,7 @@ int Process::GetNewCoordinator()
     // ofstream ofile("log/selectnewcoord"+to_string(get_pid())+","+to_string(time(NULL)%100));
     int min;
     pthread_mutex_lock(&up_lock);
-    unordered_set<int> copy_up(up_);
+    set<int> copy_up(up_);
     pthread_mutex_unlock(&up_lock);
 
     for ( auto it = copy_up.cbegin(); it != copy_up.cend(); ++it )
@@ -1152,7 +1282,7 @@ void Process::LogUp()
     s += " ";
     //TODO:mutex lock up
     pthread_mutex_lock(&up_lock);
-    unordered_set<int> copy_up_ = up_;
+    set<int> copy_up_ = up_;
     pthread_mutex_unlock(&up_lock);
 
     for ( auto it = copy_up_.begin(); it != copy_up_.end(); ++it )
@@ -1252,8 +1382,6 @@ void Process::CloseSDRFDs()
     }
 }
 
-
-
 vector<string> split(string s, char delimiter)
 {
     stringstream ss(s);
@@ -1265,6 +1393,3 @@ vector<string> split(string s, char delimiter)
     }
     return rval;
 }
-
-
-

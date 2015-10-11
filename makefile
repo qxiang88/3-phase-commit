@@ -36,4 +36,7 @@ cleanlog:
 	mkdir log/sendalivelog/
 	mkdir log/sdr/
 	mkdir log/up/
+	mkdir log/upresponse/
+	mkdir log/decresponse/
 	./controller
+	

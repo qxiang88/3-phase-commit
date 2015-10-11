@@ -517,6 +517,9 @@ void Process::CoordinatorMode() {
     } else {
 
         LogPreCommit();
+
+        return; 
+
         SendPreCommitToAll();
         WaitForAck();
         LogCommit();

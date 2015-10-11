@@ -207,7 +207,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
                     cout << "didnt find " << alive_to_check << " for " << pid << endl;
                     p->RemoveFromUpSet(pid);
                     pthread_mutex_lock(&up_lock);
-                    unordered_set <int> copy_up(p->up_);
+                    set <int> copy_up(p->up_);
                     pthread_mutex_unlock(&up_lock);
                     PrintUpSet(p->get_pid(), copy_up);
                 }
@@ -236,7 +236,7 @@ void* SendAlive(void *_p) {
         msg += to_string(time(NULL) % 100);
         msg += " ";
         pthread_mutex_lock(&up_lock);
-        unordered_set<int> up_copy(p->up_);
+        set<int> up_copy(p->up_);
         pthread_mutex_unlock(&up_lock);
 
         auto it = up_copy.begin();
@@ -263,7 +263,7 @@ void* SendAlive(void *_p) {
     cout << "Exiting" << endl;
 }
 
-void PrintUpSet(int whose, unordered_set<int> up_)
+void PrintUpSet(int whose, set<int> up_)
 {
     ofstream outf("log/up" + to_string(whose), fstream::app);
     outf << whose << "_up at " << time(NULL) % 100 << " : ";
