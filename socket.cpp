@@ -36,7 +36,7 @@ void sigchld_handler(int s) {
 // this connection is corresponding to the send connection
 bool Process::ConnectToProcess(int process_id) {
     if (get_fd(process_id) != -1) return true;
-    // cout << get_pid() << "to" << process_id<<"for"<<get_fd(process_id);
+    // cout << get_pid() << "to" << process_id<<"for"<<get_fd(process_id)<<endl;
     int sockfd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *clientinfo, *l;
 
@@ -129,6 +129,10 @@ bool Process::ConnectToProcess(int process_id) {
     // cout << "P" << get_pid() << ": Client: connecting to " << outgoing_port << endl ;
     freeaddrinfo(servinfo); // all done with this structure
     set_fd(process_id, sockfd);
+
+    // timeval t;
+    // gettimeofday(&t, NULL);
+    // cout << get_pid() << "to" << process_id<<"for new"<<get_fd(process_id)<<"at"<<t.tv_sec<<","<<t.tv_usec<<endl;
     // cout << "P" << get_pid() << ": Initiating connection to P" << process_id << endl;
     return true;
 }
@@ -215,6 +219,9 @@ void* server(void* _p) {
         int process_id = p->get_send_port_pid_map(incoming_port);
         if (process_id != -1) {   // incoming connection is from send_port
             p->set_fd(process_id, new_fd);
+            timeval t;
+            gettimeofday(&t, NULL);
+            cout << p->get_pid() << "to" << process_id<<"fd="<<p->get_fd(process_id)<<"at"<<t.tv_sec<<","<<t.tv_usec<<endl;
             // cout << "P" << p->get_pid() << ": Server: accepting connection from P"
             // << p->get_send_port_pid_map(incoming_port) << endl;
         } else {

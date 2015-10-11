@@ -60,8 +60,8 @@ void* ThreadEntry(void* _p) {
             cout << "P" << p->get_pid() << ": Recovery mode over" << endl;
         }
         else {
+            cout<<"P"<<p->get_pid()<<"threads="<<p->thread_set.size()<<endl;
             p->ThreeWayHandshake();
-            // cout<<"P"<<p->get_pid()<<p->get_my_status()<<endl;
             // if my_status_ is DONE, it means it completed prev transaction
             // so, it enters normal modes
 
@@ -173,12 +173,14 @@ void Process::Close_server_sockfd() {
 // TODO: remember to set _fd_ to -1 on connection close
 // saves socket fd for connection from a send port
 void Process::set_fd(int process_id, int new_fd) {
+    cout << "P" << get_pid() << ": for P" << process_id << ": old=" << get_fd(process_id);
     pthread_mutex_lock(&fd_lock);
     if (fd_[process_id] == -1)
     {
         fd_[process_id] = new_fd;
     }
     pthread_mutex_unlock(&fd_lock);
+    cout << ": new=" << get_fd(process_id) << endl;
 }
 
 void Process::reset_fd(int process_id) {
@@ -308,7 +310,7 @@ Handshake Process::get_handshake() {
 void Process::Print() {
     cout << "pid=" << get_pid() << " ";
     for (int i = 0; i < N; ++i) {
-        cout << fd_[i] << ",";
+        cout << get_fd(i) << ",";
     }
     cout << endl;
 }
@@ -699,11 +701,12 @@ void Process::Recovery()
         if (ConnectToProcess(p))
         {
             // if (ConnectToProcessAlive(p)) {
-            ConnectToProcessSDR(p);
+            if (!ConnectToProcessSDR(p)) {
+                cout << "P" << get_pid() << ": Unable to connect SDR to P" << p << endl;
+            }
             // } else {
             //TODO: I don't think we need to do anything special
             // apart from not adding participant_[i] to the upset.
-            // cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << p << endl;
         } else {
             //TODO: I don't think we need to do anything special
             // apart from not adding participant_[i] to the upset.
@@ -711,9 +714,9 @@ void Process::Recovery()
         }
     }
 
-    pthread_t send_alive_thread;
-    vector<pthread_t> receive_alive_threads(up_.size());
-    CreateAliveThreads(receive_alive_threads, send_alive_thread);
+    // pthread_t send_alive_thread;
+    // vector<pthread_t> receive_alive_threads(up_.size());
+    // CreateAliveThreads(receive_alive_threads, send_alive_thread);
 
     // one sdr receive thread for each participant, not just those in up_
     // because any participant could ask for Dec Req in future.
@@ -732,16 +735,16 @@ void Process::Recovery()
     //probably need to send the decision to others
 
     if (decision == "commit")
-        {
-            my_state_ = COMMITTED;
-            cout<<"Had received commit"<<endl;
-        }
+    {
+        my_state_ = COMMITTED;
+        cout << "Had received commit" << endl;
+    }
 
     else if (decision == "abort")
-        {
-            my_state_ = ABORTED;
-            cout<<"Had received abort"<<endl;
-        }
+    {
+        my_state_ = ABORTED;
+        cout << "Had received abort" << endl;
+    }
 
     else if (decision == "precommit")
     {
@@ -754,20 +757,20 @@ void Process::Recovery()
         string vote = GetVote();
         if (vote == "yes")
         {
-            cout<<"Had voted yes"<<endl;
+            cout << "Had voted yes" << endl;
             my_state_ = UNCERTAIN;
             DecisionRequest();
         }
         else if (vote.empty())
         {
-            cout<<"Hadnt voted. So aborting"<<endl;
+            cout << "Hadnt voted. So aborting" << endl;
             my_state_ = ABORTED;
             LogAbort();
         }
     }
-    cout<<"Decided. My state is ";
-    if(get_my_state()==1)cout<<"Aborted"<<endl;
-    else if(get_my_state()==4)cout<<"Commited"<<endl;
+    cout << "Decided. My state is ";
+    if (get_my_state() == 1)cout << "Aborted" << endl;
+    else if (get_my_state() == 4)cout << "Commited" << endl;
 
 }
 
@@ -872,12 +875,12 @@ void* ReceiveDecision(void* _rcv_thread_arg)
         } else {
             buf[num_bytes] = '\0';
             cout << "P" << p->get_pid() << ": DecMsg received from P" << pid << ": ";
-            if(buf[0]=='0')
-                cout<<"Abort"<<endl;
-            else if(buf[1]=='1')
-                cout<<"Commit"<<endl;
+            if (buf[0] == '0')
+                cout << "Abort" << endl;
+            else if (buf[1] == '1')
+                cout << "Commit" << endl;
             else
-                cout<<buf<<endl;
+                cout << buf << endl;
 
             string extracted_msg;
             int received_tid;
@@ -900,9 +903,11 @@ void Process::SendDecReqToAll(const string &msg) {
     //this only contains operational processes for non timeout cases
     for ( auto it = participants_.begin(); it != participants_.end(); ++it ) {
         if ((*it) == get_pid()) continue; // do not send to self
+        cout << "P" << get_pid() << ": sdr_fd for P" << (*it) << "=" << get_sdr_fd(*it) << endl;
         if (send(get_sdr_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR1: sending to P" << (*it) << endl;
-            RemoveFromUpSet(*it);
+            // RemoveFromUpSet(*it);
+            // no need to update up set
         }
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (*it) << ": " << msg << endl;
@@ -1122,7 +1127,7 @@ void Process::SendState(int recp)
     string msg;
     string msg_to_send = to_string((int)my_state_);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    cout << "trying to send st to " << recp << endl;
+    // cout << "trying to send st to " << recp << endl;
     if (recp == INT_MAX)
         return;
 
@@ -1147,7 +1152,9 @@ void Process::SendDecision(int recp)
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     cout << get_fd(recp) << " " << recp << endl;
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << endl;
+        timeval aftertime;
+        gettimeofday(&aftertime, NULL);
+        cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec<<endl;
         RemoveFromUpSet(recp);
     }
     else {

@@ -26,7 +26,11 @@ void Controller::set_coordinator(int coordinator_id) {
 }
 
 int Controller::get_coordinator() {
-    return coordinator_;
+    int c;
+    pthread_mutex_lock(&coordinator_lock);
+    c = coordinator_;
+    pthread_mutex_unlock(&coordinator_lock);
+    return c;
 }
 
 int Controller::get_listen_port(int process_id) {
@@ -338,13 +342,13 @@ int main() {
 
 
 
-            // sleep(4);
-            // c.KillProcess(0);
+            sleep(4);
+            c.KillProcess(0);
             // // sleep(4);
             // // c.KillProcess(1);
             // // sleep(4);
             // // c.KillProcess(2);
-            sleep(4);
+            sleep(6);
             if (!c.ResurrectProcess(0)) return 1;
         }
         usleep(kTransactionSleep);

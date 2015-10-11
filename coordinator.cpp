@@ -437,7 +437,7 @@ void Process::CoordinatorMode() {
     //TODO: increment it
     //TODO: send it to ConstructVoteReq;
 
-    for (const auto &pm: participant_state_map_) {
+    for (const auto &pm : participant_state_map_) {
         if (pm.first == get_pid()) continue;
         if (ConnectToProcess(pm.first)) {
             // setup alive connection to this process
@@ -451,7 +451,7 @@ void Process::CoordinatorMode() {
                 cout << "P" << get_pid() << ": Unable to connect ALIVE to P" << pm.first << endl;
             }
         } else {
-                cout << "P" << get_pid() << ": Unable to connect to P" << pm.first << endl;
+            cout << "P" << get_pid() << ": Unable to connect to P" << pm.first << endl;
         }
     }
     usleep(kGeneralSleep); //sleep to make sure connections are established
@@ -480,7 +480,6 @@ void Process::CoordinatorMode() {
 
     CreateAliveThreads(receive_alive_threads, send_alive_thread);
     WaitForVotes();
-
     string trans = get_transaction(transaction_id_);
     //TODO: Handle case when trans = "NULL". See also ConstructVoteReq same cases
     Vote(trans); //coordinator's self vote
@@ -512,8 +511,8 @@ void Process::CoordinatorMode() {
     } else {
 
         LogPreCommit();
-        // return;
-        
+        return;
+
         SendPreCommitToAll();
         WaitForAck();
         LogCommit();
@@ -577,6 +576,7 @@ void* NewCoordinatorMode(void * _p) {
             p->SendAbortToProcess(ps.first);
         }
         p->set_my_state(ABORTED);
+        p->RemoveThreadFromSet(pthread_self());
         return NULL;
     }
 
@@ -598,13 +598,14 @@ void* NewCoordinatorMode(void * _p) {
         }
         p->SendCommitToAll();
         p->set_my_state(COMMITTED);
+        p->RemoveThreadFromSet(pthread_self());
         return NULL;
     }
 
 
     bool uncert = true;
     for (const auto& ps : p->participant_state_map_) {
-        if(ps.second==PROCESSTIMEOUT)continue;
+        if (ps.second == PROCESSTIMEOUT)continue;
         if (ps.second != UNCERTAIN)
         {
             uncert = false;
@@ -619,6 +620,7 @@ void* NewCoordinatorMode(void * _p) {
             p->SendAbortToProcess(ps.first);
         }
         p->set_my_state(ABORTED);
+        p->RemoveThreadFromSet(pthread_self());
         return NULL;
     }
 
@@ -639,5 +641,6 @@ void* NewCoordinatorMode(void * _p) {
     else
         p->prev_decisions_.push_back(COMMIT);
 
+    p->RemoveThreadFromSet(pthread_self());
     return NULL;
 }
