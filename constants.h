@@ -17,7 +17,7 @@ const string kRemove = "REMOVE";
 const string kEdit = "EDIT";
 
 const time_t kGeneralSleep = 2000 * 1000;
-const time_t kTransactionSleep = 6000 * 1000;
+const time_t kTransactionSleep = 10000 * 1000;
 const time_t kMiniSleep = 50 * 1000;
 
 const time_t kSendAliveInterval = 2000 * 1000;  // MUST be less than the kTimeout, preferably at least 1 sec less

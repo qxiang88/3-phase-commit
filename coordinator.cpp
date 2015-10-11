@@ -42,6 +42,7 @@ void Process::SendVoteReqToAll(const string &msg) {
         // if ((it->first) == get_pid()) continue; // do not send to self
         cout << "P" << get_pid() << ": fd for" << it->first << "=" << get_fd(it->first) << endl;
 
+        WaitOrProceed();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -57,6 +58,7 @@ void Process::SendStateReqToAll(const string &msg) {
     //this only contains operational processes for non timeout cases
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
+        WaitOrProceed();
         if (send(get_sdr_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -192,7 +194,7 @@ void Process::SendPreCommitToAll() {
     ConstructGeneralMsg(kPreCommit, transaction_id_, msg);
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
-
+        WaitOrProceed();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -206,7 +208,7 @@ void Process::SendPreCommitToAll() {
 void Process::SendPreCommitToProcess(int process_id) {
     string msg;
     ConstructGeneralMsg(kPreCommit, transaction_id_, msg);
-
+    WaitOrProceed();
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
         RemoveFromUpSet(process_id);
@@ -223,7 +225,7 @@ void Process::SendCommitToAll() {
     ConstructGeneralMsg(kCommit, transaction_id_, msg);
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
-
+        WaitOrProceed();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -485,7 +487,7 @@ void Process::CoordinatorMode() {
     vector<pthread_t> receive_alive_threads(up_.size());
 
     CreateAliveThreads(receive_alive_threads, send_alive_thread);
-    
+
     WaitForVotes();
     string trans = get_transaction(transaction_id_);
     //TODO: Handle case when trans = "NULL". See also ConstructVoteReq same cases
@@ -518,7 +520,6 @@ void Process::CoordinatorMode() {
     } else {
 
         LogPreCommit();
-
         SendPreCommitToAll();
         WaitForAck();
         // return;

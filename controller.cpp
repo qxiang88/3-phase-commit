@@ -66,6 +66,8 @@ int Controller::get_alive_port_pid_map(int port_num) {
         return alive_port_pid_map_[port_num];
 }
 
+// returns -1 if there is no entry for port_num in sdr_port_pid_map_
+// otherwise returns the pid
 int Controller::get_sdr_port_pid_map(int port_num) {
     if (sdr_port_pid_map_.find(port_num) == sdr_port_pid_map_.end())
         return -1;
@@ -76,8 +78,8 @@ int Controller::get_sdr_port_pid_map(int port_num) {
 // reads the config file
 // sets value of N
 // adds port values to listen_port_ , send_port_, alive_port_
-// constructs send_port_pid_map_
-// constructs alive_port_pid_map_
+// sdr_port_ and up_port_
+// constructs corresponding port_pid_maps
 bool Controller::ReadConfigFile() {
     int count;
     ifstream temp;
@@ -130,6 +132,9 @@ bool Controller::ReadConfigFile() {
     }
 }
 
+// creates N Process objects
+// calls Initialize for each process
+// creates a thread for each process
 bool Controller::CreateProcesses() {
     process_thread_.resize(N);
     // creating N Process objects
@@ -149,6 +154,10 @@ bool Controller::CreateProcesses() {
     return true;
 }
 
+// increments all port values for a resurrecting process by 1
+// done to prevent the resurrecting process from attempting to
+// use ports it bound to in last transaction
+// those ports might still be hogged
 void Controller::IncrementPorts(int p) {
     int old_send = send_port_[p];
     int old_alive = alive_port_[p];
@@ -173,6 +182,9 @@ void Controller::IncrementPorts(int p) {
     sdr_port_[p]++;
 }
 
+// revives a dead process by calling its Initializer
+// and creating a thread with ThreadEntry
+// adds the process to alive_process_ids_ set
 bool Controller::ResurrectProcess(int process_id) {
     IncrementPorts(process_id);
     process_[process_id].Initialize(process_id,
@@ -202,7 +214,7 @@ void Controller::WaitForThreadJoins() {
 void Controller::CreateTransactions() {
     transaction_.push_back(kAdd + " song19 http11");
     transaction_.push_back(kAdd + " song119 http111");
-    // transaction_.push_back(kRemove + " song01");
+    transaction_.push_back(kRemove + " song01");
     // transaction_.push_back(kEdit + " song02 song55 http55");
 }
 
@@ -249,6 +261,8 @@ int Controller::ChooseCoordinator() {
     return coord_id;
 }
 
+// sets handshake of all alive processes to EXPECTING
+// indicates to processes that it is time to enter ThreadEntry function
 void Controller::SetHandshakeToExpecting() {
     for (const auto &p : alive_process_ids_) {
         if (process_[p].get_my_status() == DONE) {
@@ -257,6 +271,7 @@ void Controller::SetHandshakeToExpecting() {
     }
 }
 
+// waits till handskake of all alive processess is READY
 void Controller::WaitTillHandshakeReady() {
     for (const auto &p : alive_process_ids_) {
         if (process_[p].get_handshake() == READY) {
@@ -267,10 +282,12 @@ void Controller::WaitTillHandshakeReady() {
     }
 }
 
+// sets coordinator's handshake value to INIT3PC
 void Controller::SetCoordHandshakeToInit3PC() {
     process_[get_coordinator()].set_handshake(INIT3PC);
 }
 
+// removes specified process from the alive_process_ids_ set
 void Controller::RemoveFromAliveProcessIds(int process_id) {
     if (alive_process_ids_.find(process_id) != alive_process_ids_.end()) {
         alive_process_ids_.erase(process_id);
@@ -285,7 +302,7 @@ void Controller::InformCoordinatorOfNewTransaction(int coord_id, int tid) {
 //Constructs Coordinator's participant_state_map_
 void Controller::InformCoordiantorOfParticipants(int coord_id) {
     for (const auto &p : alive_process_ids_) {
-        if(p == coord_id) continue;
+        if (p == coord_id) continue;
         if (process_[p].get_my_status() == DONE ) {
             process_[coord_id].participant_state_map_.insert(make_pair(p, UNINITIALIZED));
         } else {
@@ -305,6 +322,66 @@ void Controller::ResetProcesses(int coord_id) {
             continue;
         }
     }
+}
+
+// kills all alive processes
+// removes them from alive_process_ids_ set
+void Controller::KillAllProcesses() {
+    for (const auto &p : alive_process_ids_) {
+        process_[p].CloseFDs();
+        process_[p].CloseSDRFDs();
+        process_[p].CloseAliveFDs();
+        process_[p].Close_server_sockfd();
+        for (const auto &th : process_[p].thread_set) {
+            pthread_cancel(th);
+        }
+        for (const auto &th : process_[p].thread_set_alive_) {
+            pthread_cancel(th);
+        }
+        pthread_cancel(process_thread_[p]);
+    }
+
+    for (const auto &p : alive_process_ids_) {
+        RemoveFromAliveProcessIds(p);
+    }
+}
+
+// kills the current coordinator_
+void Controller::KillLeader() {
+    KillProcess(get_coordinator());
+}
+
+// resurrects all dead processes
+void Controller::ResurrectAll() {
+    for (int i = 0; i < N; ++i) {
+        // if process is NOT alive
+        if(alive_process_ids_.find(i) == alive_process_ids_.end()) {
+            ResurrectProcess(i);
+        }
+    }
+}
+
+// sets num_messages_ value for the given process
+void Controller::SetMessageCount(int process_id, int num_messages) {
+    process_[process_id].set_num_messages(num_messages);
+}
+
+// sets pause_protocol_ to true
+// this effectively lets the current state stablize
+// no process either sends any 3PC related msg during this phase
+// no process delivers any received 3PC related msg during this phase
+// no delivery does not mean timing out on receive. Effectively, timeout clock is paused
+// void Controller::PauseProtocol() {
+//     for (const auto &p : alive_process_ids_) {
+//         process_.set_pause_protocol(true);
+//     }
+// }
+
+// sets resume_ flag to true for process_id
+// this effectively lets that process to resume 3PC related message-passing
+// by ignoring num_messages_ value
+void Controller::ResumeMessages(int process_id) {
+    process_[process_id].set_resume(true);
 }
 
 bool InitializeLocks() {
@@ -343,18 +420,18 @@ int main() {
             c.WaitTillHandshakeReady();
             c.SetCoordHandshakeToInit3PC();
 
+            
 
-
+            // sleep(3);
+            // if (t == 0) c.KillProcess(0);
+            // // if(t==1) c.KillProcess(1);
+            // // // sleep(4);
+            // // // c.KillProcess(1);
+            // // // sleep(4);
+            // // // c.KillProcess(2);
             // sleep(4);
-            // c.KillProcess(0);
-            // // sleep(4);
-            // // c.KillProcess(1);
-            // // sleep(4);
-            // // c.KillProcess(2);
-            // usleep(60*1000);
             // if (!c.ResurrectProcess(0)) return 1;
         }
-        usleep(kTransactionSleep);
         usleep(kTransactionSleep);
         t++;
     }

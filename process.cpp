@@ -21,6 +21,8 @@ pthread_mutex_t log_lock;
 pthread_mutex_t new_coord_lock;
 pthread_mutex_t state_req_lock;
 pthread_mutex_t my_coord_lock;
+pthread_mutex_t num_messages_lock;
+pthread_mutex_t resume_lock;
 
 
 void Process::ThreeWayHandshake() {
@@ -123,6 +125,8 @@ void Process::Initialize(int pid,
     state_req_in_progress = false;
     new_coord_thread_made = false;
     server_sockfd_ = -1;
+    num_messages_ = INT_MAX;
+    resume_ = false;
     handshake_ = BLANK;
 }
 
@@ -140,6 +144,8 @@ void Process::Reset(int coord_id) {
     newcoord_thread = 0;
     new_coord_thread_made = false;
     state_req_in_progress = false;
+    num_messages_ = INT_MAX;
+    resume_ = false;
     handshake_ = BLANK;
 }
 
@@ -307,6 +313,38 @@ Handshake Process::get_handshake() {
     return handshake_;
 }
 
+int Process::get_num_messages() {
+    int num;
+    pthread_mutex_lock(&num_messages_lock);
+    num = num_messages_;
+    pthread_mutex_unlock(&num_messages_lock);
+    return num;
+}
+
+void Process::set_num_messages(int num) {
+    pthread_mutex_lock(&num_messages_lock);
+    num_messages_ = num;
+    pthread_mutex_unlock(&num_messages_lock);
+}
+
+void Process::DecrementNumMessages() {
+    set_num_messages(get_num_messages() - 1);
+}
+
+bool Process::get_resume() {
+    int res;
+    pthread_mutex_lock(&resume_lock);
+    res = resume_;
+    pthread_mutex_unlock(&resume_lock);
+    return res;
+}
+
+void Process::set_resume(bool res) {
+    pthread_mutex_lock(&resume_lock);
+    resume_ = res;
+    pthread_mutex_unlock(&resume_lock);
+}
+
 // print function for debugging purposes
 void Process::Print() {
     cout << "pid=" << get_pid() << " ";
@@ -359,6 +397,20 @@ bool Process::LoadPlaylist() {
     }
 }
 
+// returns immediately if resume_ is true
+// if resume is false, waits till num_messages_ is positive
+void Process::WaitOrProceed() {
+    if (get_resume()) {
+        return; // if resume is true, then ignore num_messages_ and let 3PC run
+    } else {
+        // resume is false. Check value of num_messages_
+        // waits till num_messages_ is positive
+        while (get_num_messages() <= 0) {
+            usleep(kMiniSleep);
+        }
+    }
+}
+
 // process's voting function based on the loaded
 // playlist and the transaction trans
 // sets my_state_ accordingly
@@ -407,8 +459,8 @@ void Process::Vote(string trans) {
 // works for following message bodies
 // msg_body = ABORT,
 // outputs constructed msg in msg
-void Process::ConstructGeneralMsg(const string &msg_body,
-                                  const int transaction_id, string &msg) {
+void Process::ConstructGeneralMsg(const string & msg_body,
+                                  const int transaction_id, string & msg) {
     msg = msg_body + " " + to_string(transaction_id) + " $" ;
 }
 
@@ -416,7 +468,7 @@ void Process::ConstructGeneralMsg(const string &msg_body,
 void Process::SendAbortToProcess(int process_id) {
     string msg;
     ConstructGeneralMsg(kAbort, transaction_id_, msg);
-
+    WaitOrProceed();
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
         RemoveFromUpSet(process_id);
@@ -429,7 +481,7 @@ void Process::SendAbortToProcess(int process_id) {
 // takes as input the received_msg
 // extracts the core message body from it to extracted_msg
 // extracts transaction id in the received_msg to received_tid
-void Process::ExtractMsg(const string &received_msg, string &extracted_msg, int &received_tid) {
+void Process::ExtractMsg(const string & received_msg, string & extracted_msg, int &received_tid) {
     std::istringstream iss(received_msg);
     iss >> extracted_msg;
     iss >> received_tid;
@@ -468,6 +520,16 @@ void Process::InitializeLocks() {
     }
 
     if (pthread_mutex_init(&my_coord_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+
+    if (pthread_mutex_init(&num_messages_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+
+    if (pthread_mutex_init(&resume_lock, NULL) != 0) {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
         pthread_exit(NULL);
     }
@@ -927,12 +989,13 @@ void* ReceiveDecision(void* _rcv_thread_arg)
 }
 
 
-void Process::SendDecReqToAll(const string &msg) {
+void Process::SendDecReqToAll(const string & msg) {
 
     //this only contains operational processes for non timeout cases
     for ( auto it = participants_.begin(); it != participants_.end(); ++it ) {
         if ((*it) == get_pid()) continue; // do not send to self
         cout << "P" << get_pid() << ": sdr_fd for P" << (*it) << "=" << get_sdr_fd(*it) << endl;
+        WaitOrProceed();
         if (send(get_sdr_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR1: sending to P" << (*it) << endl;
             // RemoveFromUpSet(*it);
@@ -1034,6 +1097,7 @@ bool Process::SendURElected(int recp)
     string msg;
     string msg_to_send = kURElected;
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    WaitOrProceed();
     if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
         RemoveFromUpSet(recp);
@@ -1159,7 +1223,7 @@ void Process::SendState(int recp)
     // cout << "trying to send st to " << recp << endl;
     if (recp == INT_MAX)
         return;
-
+    WaitOrProceed();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
         RemoveFromUpSet(recp);
@@ -1180,10 +1244,11 @@ void Process::SendDecision(int recp)
     string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     cout << get_fd(recp) << " " << recp << endl;
+    WaitOrProceed();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         timeval aftertime;
         gettimeofday(&aftertime, NULL);
-        cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec<<endl;
+        cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
         RemoveFromUpSet(recp);
     }
     else {
@@ -1197,6 +1262,7 @@ void Process::SendPrevDecision(int recp, int tid)
     int code_to_send = prev_decisions_[tid];
     string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    WaitOrProceed();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
         RemoveFromUpSet(recp);

@@ -121,7 +121,8 @@ public:
     void RemoveThreadFromSetAlive(pthread_t thread);
     void CreateThreadForAlive(pthread_t &thread, void* (*f)(void* ), void* arg);
     void KillAliveThreads();
-
+    void DecrementNumMessages();
+    void WaitOrProceed();
 
 
 
@@ -183,6 +184,10 @@ public:
     void set_my_status(ProcessRunningStatus status);
     void set_server_sockfd(int socket_fd);
     int get_server_sockfd();
+    int get_num_messages();
+    void set_num_messages(int num);
+    bool get_resume();
+    void set_resume(bool res);
     void Close_server_sockfd();
     void reset_fd(int process_id);
     void reset_alive_fd(int process_id);
@@ -248,8 +253,14 @@ private:
     //can there be votereq of new process while one 3PC ongoing?
     int my_coordinator_;
     int transaction_id_;
-
-
+    // number of messages after which process should stop sending msgs pertaining
+    // to forward progress of 3PC
+    // it continues to send ALIVE messages
+    // it continues to receive all messages
+    int num_messages_;
+    // true means resume sending 3PC messages if paused (due to num_messages_ begin 0)
+    // false means proceed if num_messages_ count permits
+    bool resume_;
 
 };
 
