@@ -91,11 +91,13 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
         // pthread_exit(NULL);
     } else if (rv == 0) {   //timeout
-        cout<<"TIMEOUT"<<endl;
+        cout << "TIMEOUT" << endl;
         my_state_ = ABORTED;
         RemoveFromUpSet(pid);
 
     } else {    // activity happened on the socket
+        cout << "P" << get_pid() << ": fd for" << pid << "=" << get_fd(pid) << endl;
+
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
             RemoveFromUpSet(pid);
@@ -351,26 +353,29 @@ void Process::ParticipantMode() {
         // TODO: check if special actions required
     } else { // VOTE-REQ received.
         ConstructUpSet();
-        
+
         pthread_t send_alive_thread;
         vector<pthread_t> receive_alive_threads(up_.size());
         CreateAliveThreads(receive_alive_threads, send_alive_thread);
 
-        // one sdr receive thread for each participant, not just those in up_
-        // because any participant could ask for Dec Req in future.
-        // size = participant_.size()-1 because it contains self
-        // size + 1 for coordinator
-        vector<pthread_t> sdr_receive_threads(participants_.size());
-        int i = 0;
-        for (auto it = participants_.begin(); it != participants_.end(); ++it) {
-            //make sure you don't create a SDR receive thread for self
-            if (*it == get_pid()) continue;
-            CreateSDRThread(*it, sdr_receive_threads[i]);
-            i++;
+        // create SDR threads only for the first transaction
+        // because they will keep on running forever.
+        if (transaction_id_ == 0) {
+            // one sdr receive thread for each participant, not just those in up_
+            // because any participant could ask for Dec Req in future.
+            // size = participant_.size()-1 because it contains self
+            // size + 1 for coordinator
+            vector<pthread_t> sdr_receive_threads(participants_.size());
+            int i = 0;
+            for (auto it = participants_.begin(); it != participants_.end(); ++it) {
+                //make sure you don't create a SDR receive thread for self
+                if (*it == get_pid()) continue;
+                CreateSDRThread(*it, sdr_receive_threads[i]);
+                i++;
+            }
+
+            CreateSDRThread(get_my_coordinator(), sdr_receive_threads[i]);
         }
-
-        CreateSDRThread(get_my_coordinator(), sdr_receive_threads[i]);
-
 
         // vector<pthread_t> sdr_receive_thread;
         // CreateSDRThread(sdr_receive_thread);
@@ -386,7 +391,7 @@ void Process::ParticipantMode() {
     LogVoteReq();
     LogUp();
     Vote(transaction_msg);
-            // Print();
+    // Print();
 
     if (my_state_ ==  ABORTED)
     {   //participant's vote was NO

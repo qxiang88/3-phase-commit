@@ -60,7 +60,6 @@ void* ThreadEntry(void* _p) {
             cout << "P" << p->get_pid() << ": Recovery mode over" << endl;
         }
         else {
-            cout<<"P"<<p->get_pid()<<"threads="<<p->thread_set.size()<<endl;
             p->ThreeWayHandshake();
             // if my_status_ is DONE, it means it completed prev transaction
             // so, it enters normal modes
@@ -107,6 +106,7 @@ void Process::Initialize(int pid,
     alive_fd_.clear();
     sdr_fd_.clear();
     thread_set.clear();
+    thread_set_alive_.clear();
     up_.clear();
     participants_.clear();
     participant_state_map_.clear();
@@ -131,6 +131,7 @@ void Process::Reset(int coord_id) {
 
     log_.clear();
     up_.clear();
+    thread_set_alive_.clear();
     participants_.clear();
     participant_state_map_.clear();
 
@@ -320,9 +321,19 @@ void Process::AddThreadToSet(pthread_t thread) {
     thread_set.insert(thread);
 }
 
+// adds the pthread_t entry to the thread_set_alive_
+void Process::AddThreadToSetAlive(pthread_t thread) {
+    thread_set_alive_.insert(thread);
+}
+
 // removes the pthread_t entry from the thread_set
 void Process::RemoveThreadFromSet(pthread_t thread) {
     thread_set.erase(thread);
+}
+
+// removes the pthread_t entry from the thread_set_alive_
+void Process::RemoveThreadFromSetAlive(pthread_t thread) {
+    thread_set_alive_.erase(thread);
 }
 
 // reads the playlist file
@@ -462,6 +473,13 @@ void Process::InitializeLocks() {
     }
 }
 
+// kills all alive threads
+void Process::KillAliveThreads() {
+    for (const auto &th : thread_set_alive_) {
+        pthread_cancel(th);
+    }
+}
+
 // creates a new thread with passed
 // adds the new thread to the thread set
 void Process::CreateThread(pthread_t &thread, void* (*f)(void* ), void* arg) {
@@ -470,6 +488,17 @@ void Process::CreateThread(pthread_t &thread, void* (*f)(void* ), void* arg) {
         pthread_exit(NULL);
     }
     AddThreadToSet(thread);
+}
+
+// Especially for alive threads
+// creates a new alive thread with passed
+// adds the new alive thread to the alive_thread set
+void Process::CreateThreadForAlive(pthread_t &thread, void* (*f)(void* ), void* arg) {
+    if (pthread_create(&thread, NULL, f, arg)) {
+        cout << "P" << get_pid() << ": ERROR: Unable to create thread" << endl;
+        pthread_exit(NULL);
+    }
+    AddThreadToSetAlive(thread);
 }
 
 // creates one receive alive thread
@@ -488,11 +517,11 @@ void Process::CreateAliveThreads(vector<pthread_t> &receive_alive_threads, pthre
         rcv_alive_thread_arg[i] = new ReceiveAliveThreadArgument;
         rcv_alive_thread_arg[i]->p = this;
         rcv_alive_thread_arg[i]->pid_from_whom = *it;
-        CreateThread(receive_alive_threads[i], ReceiveAlive, (void *)rcv_alive_thread_arg[i]);
+        CreateThreadForAlive(receive_alive_threads[i], ReceiveAlive, (void *)rcv_alive_thread_arg[i]);
         i++;
     }
     // CreateThread(receive_alive_thread, ReceiveAlive, (void *)this);
-    CreateThread(send_alive_thread, SendAlive, (void *)this);
+    CreateThreadForAlive(send_alive_thread, SendAlive, (void *)this);
 }
 
 void Process::CreateSDRThread(int process_id, pthread_t &sdr_receive_thread) {

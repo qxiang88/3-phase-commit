@@ -40,6 +40,7 @@ void Process::ConstructStateReq(string &msg) {
 void Process::SendVoteReqToAll(const string &msg) {
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
+        cout << "P" << get_pid() << ": fd for" << it->first << "=" << get_fd(it->first) << endl;
 
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
@@ -456,19 +457,21 @@ void Process::CoordinatorMode() {
     }
     usleep(kGeneralSleep); //sleep to make sure connections are established
 
-    pthread_t send_alive_thread;
-    vector<pthread_t> receive_alive_threads(up_.size());
-
-    // one sdr receive thread for each participant, not just those in up_
-    // because any participant could ask for Dec Req in future.
-    // size = participant_state_map_.size() because it does not contain self
-    vector<pthread_t> sdr_receive_threads(participant_state_map_.size());
-    int i = 0;
-    for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it) {
-        //make sure you don't create a SDR receive thread for self
-        if (it->first == get_pid()) continue;
-        CreateSDRThread(it->first, sdr_receive_threads[i]);
-        i++;
+    
+    // create SDR threads only for the first transaction
+    // because they will keep on running forever.
+    if (transaction_id_ == 0) {
+        // one sdr receive thread for each participant, not just those in up_
+        // because any participant could ask for Dec Req in future.
+        // size = participant_state_map_.size() because it does not contain self
+        vector<pthread_t> sdr_receive_threads(participant_state_map_.size());
+        int i = 0;
+        for (auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it) {
+            //make sure you don't create a SDR receive thread for self
+            if (it->first == get_pid()) continue;
+            CreateSDRThread(it->first, sdr_receive_threads[i]);
+            i++;
+        }
     }
     // CreateSDRThread(sdr_receive_threads);
 
@@ -478,7 +481,11 @@ void Process::CoordinatorMode() {
     LogStart();
     LogUp();
 
+    pthread_t send_alive_thread;
+    vector<pthread_t> receive_alive_threads(up_.size());
+
     CreateAliveThreads(receive_alive_threads, send_alive_thread);
+    
     WaitForVotes();
     string trans = get_transaction(transaction_id_);
     //TODO: Handle case when trans = "NULL". See also ConstructVoteReq same cases
@@ -511,10 +518,10 @@ void Process::CoordinatorMode() {
     } else {
 
         LogPreCommit();
-        return;
 
         SendPreCommitToAll();
         WaitForAck();
+        // return;
         LogCommit();
         my_state_ = COMMITTED;
 

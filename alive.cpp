@@ -33,7 +33,7 @@ void Process::RemoveFromUpSet(int k) {
         LogUp();
 
     if (k != INT_MAX) {
-        // cout<<"~~~~"<<endl;
+        cout<<"~~~~"<<endl;
         reset_fd(k);
         reset_alive_fd(k);
         reset_sdr_fd(k);
@@ -178,7 +178,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
             // outf << "P" << p->get_pid() << ": ERROR in receiving ALIVE -1 for P" << pid << " " << p->get_alive_fd(pid) << "errno=" << (errno) << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
             // if (errno == EAGAIN) outf << "found" << endl;
             p->RemoveFromUpSet(pid);
-            p->RemoveThreadFromSet(pthread_self());
+            p->RemoveThreadFromSetAlive(pthread_self());
             return NULL;
         }
         else if ( num_bytes == 0)
@@ -186,7 +186,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
             // cout << "P" << p->get_pid() << ": ERROR in receiving ALIVE 0 for P" << pid << " " << endl;
              // outf << "P" << p->get_pid() << ": ERROR in receiving ALIVE 0 for P" << pid << " " << p->get_alive_fd(pid) << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
             p->RemoveFromUpSet(pid);
-            p->RemoveThreadFromSet(pthread_self());
+            p->RemoveThreadFromSetAlive(pthread_self());
             return NULL;
             // pthread_exit(NULL); //TODO: think about whether it should be exit or not
         }
@@ -221,7 +221,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
             unordered_set <int> copy_up(p->up_);
             pthread_mutex_unlock(&up_lock);
             PrintUpSet(p->get_pid(), copy_up);
-            p->RemoveThreadFromSet(pthread_self());
+            p->RemoveThreadFromSetAlive(pthread_self());
             return NULL;
         }
         else

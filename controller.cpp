@@ -224,7 +224,9 @@ void Controller::KillProcess(int process_id) {
     process_[process_id].Close_server_sockfd();
     for (const auto &th : process_[process_id].thread_set) {
         pthread_cancel(th);
-
+    }
+    for (const auto &th : process_[process_id].thread_set_alive_) {
+        pthread_cancel(th);
     }
     pthread_cancel(process_thread_[process_id]);
     RemoveFromAliveProcessIds(process_id);
@@ -292,11 +294,12 @@ void Controller::InformCoordiantorOfParticipants(int coord_id) {
     }
 }
 
-// resets only those processes whose states are
-// either DONE
+// resets only those processes whose states are DONE
+// also kills the alive threads of those processes
 void Controller::ResetProcesses(int coord_id) {
     for (const auto &p : alive_process_ids_) {
         if (process_[p].get_my_status() == DONE ) {
+            process_[p].KillAliveThreads();
             process_[p].Reset(coord_id);
         } else {
             continue;
@@ -342,15 +345,16 @@ int main() {
 
 
 
-            sleep(4);
-            c.KillProcess(0);
+            // sleep(4);
+            // c.KillProcess(0);
             // // sleep(4);
             // // c.KillProcess(1);
             // // sleep(4);
             // // c.KillProcess(2);
-            sleep(6);
-            if (!c.ResurrectProcess(0)) return 1;
+            // usleep(60*1000);
+            // if (!c.ResurrectProcess(0)) return 1;
         }
+        usleep(kTransactionSleep);
         usleep(kTransactionSleep);
         t++;
     }

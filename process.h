@@ -73,7 +73,7 @@ public:
                     string playlist_file,
                     int coord_id,
                     ProcessRunningStatus status);
-    
+
     void Reset(int coord_id);
     bool LoadPlaylist();
     bool ConnectToProcess(int process_id);
@@ -117,6 +117,12 @@ public:
     void CreateThread(pthread_t &thread, void* (*f)(void* ), void* arg);
     void ThreeWayHandshake();
     void WaitForInit3PC();
+    void AddThreadToSetAlive(pthread_t thread);
+    void RemoveThreadFromSetAlive(pthread_t thread);
+    void CreateThreadForAlive(pthread_t &thread, void* (*f)(void* ), void* arg);
+    void KillAliveThreads();
+
+
 
 
 
@@ -195,8 +201,10 @@ public:
     std::unordered_map<int, ProcessState> participant_state_map_;
     pthread_t newcoord_thread;
     vector<Decision> prev_decisions_;
-    // set of all threads created by a process
+    // set of all threads created by a process (except alive threads)
     std::unordered_set<pthread_t> thread_set;
+    // set of all alive threads created by a process
+    std::unordered_set<pthread_t> thread_set_alive_;
     bool new_coord_thread_made;
 
     vector<ReceiveAliveThreadArgument*> rcv_alive_thread_arg;
