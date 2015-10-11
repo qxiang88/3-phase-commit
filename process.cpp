@@ -95,7 +95,6 @@ void* ThreadEntry(void* _p) {
     pthread_exit(NULL);
 }
 
-
 void Process::Initialize(int pid,
                          string log_file,
                          string playlist_file,
@@ -131,394 +130,6 @@ void Process::Initialize(int pid,
     server_sockfd_ = -1;
     num_messages_ = INT_MAX;
     handshake_ = BLANK;
-}
-
-void Process::Reset(int coord_id) {
-    set_my_coordinator(coord_id);
-
-    log_.clear();
-    up_.clear();
-    thread_set_alive_.clear();
-    participants_.clear();
-    participant_state_map_.clear();
-
-    transaction_id_ = -1;
-    my_state_ = UNINITIALIZED;
-    newcoord_thread = 0;
-    new_coord_thread_made = false;
-    state_req_in_progress = false;
-    num_messages_ = INT_MAX;
-    handshake_ = BLANK;
-}
-
-int Process::get_pid() {
-    return pid_;
-}
-
-void Process::set_pid(int process_id) {
-    pid_ = process_id;
-}
-
-void Process::set_log_file(string logfile) {
-    log_file_ = logfile;
-}
-
-void Process::set_playlist_file(string playlistfile) {
-    playlist_file_ = playlistfile;
-}
-
-int Process::get_server_sockfd() {
-    return server_sockfd_;
-}
-
-void Process::set_server_sockfd(int socket_fd) {
-    server_sockfd_ = socket_fd;
-}
-
-void Process::Close_server_sockfd() {
-    close(server_sockfd_) ;
-}
-
-// TODO: remember to set _fd_ to -1 on connection close
-// saves socket fd for connection from a send port
-void Process::set_fd(int process_id, int new_fd) {
-    cout << "P" << get_pid() << ": for P" << process_id << ": old=" << get_fd(process_id);
-    pthread_mutex_lock(&fd_lock);
-    if (fd_[process_id] == -1)
-    {
-        fd_[process_id] = new_fd;
-    }
-    pthread_mutex_unlock(&fd_lock);
-    cout << ": new=" << get_fd(process_id) << endl;
-}
-
-void Process::set_up_fd(int process_id, int new_fd) {
-    pthread_mutex_lock(&up_fd_lock);
-    if (up_fd_[process_id] == -1)
-    {
-        up_fd_[process_id] = new_fd;
-    }
-    pthread_mutex_unlock(&up_fd_lock);
-}
-
-void Process::reset_fd(int process_id) {
-    // cout<<"P"<<get_pid()<<"reseting"<<process_id<<endl;
-    pthread_mutex_lock(&fd_lock);
-    close(fd_[process_id]);
-    fd_[process_id] = -1;
-    pthread_mutex_unlock(&fd_lock);
-}
-
-void Process::reset_up_fd(int process_id) {
-    pthread_mutex_lock(&up_fd_lock);
-    close(up_fd_[process_id]);
-    up_fd_[process_id] = -1;
-    pthread_mutex_unlock(&up_fd_lock);
-}
-
-void Process::reset_alive_fd(int process_id) {
-    pthread_mutex_lock(&alive_fd_lock);
-    close(alive_fd_[process_id]);
-    alive_fd_[process_id] = -1;
-    pthread_mutex_unlock(&alive_fd_lock);
-}
-
-void Process::reset_sdr_fd(int process_id) {
-    pthread_mutex_lock(&sdr_fd_lock);
-    close(sdr_fd_[process_id]);
-    sdr_fd_[process_id] = -1;
-    pthread_mutex_unlock(&sdr_fd_lock);
-}
-
-// TODO: remember to set fd_ to -1 on connection close
-// saves socket fd for connection from a send port
-void Process::set_sdr_fd(int process_id, int new_fd) {
-    pthread_mutex_lock(&sdr_fd_lock);
-    if (sdr_fd_[process_id] == -1)
-    {
-        sdr_fd_[process_id] = new_fd;
-    }
-    pthread_mutex_unlock(&sdr_fd_lock);
-}
-
-void Process::set_alive_fd(int process_id, int new_fd) {
-    pthread_mutex_lock(&alive_fd_lock);
-    if (alive_fd_[process_id] == -1)
-    {
-        alive_fd_[process_id] = new_fd;
-    }
-    pthread_mutex_unlock(&alive_fd_lock);
-}
-
-void Process::set_my_coordinator(int process_id) {
-    pthread_mutex_lock(&my_coord_lock);
-    my_coordinator_ = process_id;
-    pthread_mutex_unlock(&my_coord_lock);
-
-    set_coordinator(process_id);
-}
-
-void Process::set_transaction_id(int tid) {
-    transaction_id_ = tid;
-}
-
-int Process::get_transaction_id() {
-    return transaction_id_;
-}
-
-// get socket fd corresponding to process_id's send connection
-int Process::get_fd(int process_id) {
-    if (process_id == INT_MAX) return -1;
-    int ret;
-    pthread_mutex_lock(&fd_lock);
-    ret = fd_[process_id];
-    pthread_mutex_unlock(&fd_lock);
-    return ret;
-}
-
-// get socket fd corresponding to process_id's alive connection
-int Process::get_alive_fd(int process_id) {
-    if (process_id == INT_MAX) return -1;
-    int ret;
-    pthread_mutex_lock(&alive_fd_lock);
-    ret = alive_fd_[process_id];
-    pthread_mutex_unlock(&alive_fd_lock);
-    return ret;
-}
-
-int Process::get_up_fd(int process_id) {
-    if (process_id == INT_MAX) return -1;
-    int ret;
-    pthread_mutex_lock(&up_fd_lock);
-    ret = up_fd_[process_id];
-    pthread_mutex_unlock(&up_fd_lock);
-    return ret;
-}
-
-int Process::get_sdr_fd(int process_id) {
-    if (process_id == INT_MAX) return -1;
-    int ret;
-    pthread_mutex_lock(&sdr_fd_lock);
-    ret = sdr_fd_[process_id];
-    pthread_mutex_unlock(&sdr_fd_lock);
-    return ret;
-}
-
-ProcessRunningStatus Process::get_my_status() {
-    return my_status_;
-}
-
-void Process::set_my_status(ProcessRunningStatus status) {
-    my_status_ = status;
-}
-
-ProcessState Process::get_my_state()
-{
-    ProcessState local;
-    pthread_mutex_lock(&my_state_lock);
-    local = my_state_;
-    pthread_mutex_unlock(&my_state_lock);
-    return local;
-}
-
-void Process::set_my_state(ProcessState state)
-{
-    pthread_mutex_lock(&my_state_lock);
-    my_state_ = state;
-    pthread_mutex_unlock(&my_state_lock);
-}
-
-int Process::get_my_coordinator()
-{
-    int mc;
-    pthread_mutex_lock(&my_coord_lock);
-    mc = my_coordinator_;
-    pthread_mutex_unlock(&my_coord_lock);
-    return mc;
-}
-
-//TODO: handshake lock
-void Process::set_handshake(Handshake hs) {
-    handshake_ = hs;
-}
-
-Handshake Process::get_handshake() {
-    return handshake_;
-}
-
-int Process::get_num_messages() {
-    int num;
-    pthread_mutex_lock(&num_messages_lock);
-    num = num_messages_;
-    pthread_mutex_unlock(&num_messages_lock);
-    return num;
-}
-
-void Process::set_num_messages(int num) {
-    pthread_mutex_lock(&num_messages_lock);
-    num_messages_ = num;
-    pthread_mutex_unlock(&num_messages_lock);
-}
-
-void Process::DecrementNumMessages() {
-    set_num_messages(get_num_messages() - 1);
-}
-
-// print function for debugging purposes
-void Process::Print() {
-    cout << "pid=" << get_pid() << " ";
-    for (int i = 0; i < N; ++i) {
-        cout << get_fd(i) << ",";
-    }
-    cout << endl;
-}
-
-// adds the pthread_t entry to the thread_set
-void Process::AddThreadToSet(pthread_t thread) {
-    thread_set.insert(thread);
-}
-
-// adds the pthread_t entry to the thread_set_alive_
-void Process::AddThreadToSetAlive(pthread_t thread) {
-    thread_set_alive_.insert(thread);
-}
-
-// removes the pthread_t entry from the thread_set
-void Process::RemoveThreadFromSet(pthread_t thread) {
-    thread_set.erase(thread);
-}
-
-// removes the pthread_t entry from the thread_set_alive_
-void Process::RemoveThreadFromSetAlive(pthread_t thread) {
-    thread_set_alive_.erase(thread);
-}
-
-// reads the playlist file
-// loads it into playlist_ unordered map
-bool Process::LoadPlaylist() {
-    ifstream fin;
-    fin.exceptions ( ifstream::failbit | ifstream::badbit );
-    try {
-        fin.open(playlist_file_.c_str());
-        string song_name;
-        string song_url;
-        while (!fin.eof()) {
-            fin >> song_name;
-            fin >> song_url;
-            playlist_.insert(make_pair(song_name, song_url));
-        }
-        fin.close();
-        return true;
-    } catch (ifstream::failure e) {
-        cout << e.what() << endl;
-        if (fin.is_open()) fin.close();
-        return false;
-    }
-}
-
-// returns if num_messages_ is positive
-// otherwise kills the process itself
-void Process::ContinueOrDie() {
-    if (get_num_messages() <= 0) {
-        Die();
-    }
-}
-
-// closes all its FDs
-// cancels all its threads
-// removes itself from Controller's alive process set
-// kills itself
-void Process::Die() {
-    CloseFDs();
-    CloseSDRFDs();
-    CloseUpFDs();
-    CloseAliveFDs();
-    Close_server_sockfd();
-    for (const auto &th : thread_set) {
-        pthread_cancel(th);
-    }
-    for (const auto &th : thread_set_alive_) {
-        pthread_cancel(th);
-    }
-    RemoveFromAliveProcessIds(pthread_self());
-    pthread_cancel(pthread_self());
-}
-
-// process's voting function based on the loaded
-// playlist and the transaction trans
-// sets my_state_ accordingly
-void Process::Vote(string trans) {
-    std::istringstream iss(trans);
-    string transaction_type, song_name;
-    iss >> transaction_type;
-    iss >> song_name;
-    if (transaction_type == kAdd) {
-        if (playlist_.find(song_name) != playlist_.end()) {
-            // song_name already exists. Vote NO
-            my_state_ = ABORTED;
-        } else {
-            my_state_ = UNCERTAIN;
-        }
-    } else if (transaction_type == kRemove) {
-        if (playlist_.find(song_name) == playlist_.end()) {
-            // song_name does not exist. Vote NO
-            my_state_ = ABORTED;
-        } else {
-            my_state_ = UNCERTAIN;
-        }
-    } else if (transaction_type == kEdit) {
-        string new_name, new_url;
-        iss >> new_name;
-        iss >> new_url;
-        if (playlist_.find(song_name) == playlist_.end()) {
-            // song_name does not exist. Vote NO
-            my_state_ = ABORTED;
-        } else {
-            // song_name exists.
-            // Check if the new_name already exists
-            if (playlist_.find(new_name) != playlist_.end()) {
-                //new_name already exists. Can't edit. Vote NO
-                my_state_ = ABORTED;
-            } else {
-                // song_name can be edited to new_name and new_url. Vote YES
-                my_state_ = UNCERTAIN;
-            }
-        }
-    }
-}
-
-// constructs general msgs of form (without quotes)
-// "<msgbody> <transaction_id> $"
-// works for following message bodies
-// msg_body = ABORT,
-// outputs constructed msg in msg
-void Process::ConstructGeneralMsg(const string & msg_body,
-                                  const int transaction_id, string & msg) {
-    msg = msg_body + " " + to_string(transaction_id) + " $" ;
-}
-
-// sends ABORT message to process with pid=process_id
-void Process::SendAbortToProcess(int process_id) {
-    string msg;
-    ConstructGeneralMsg(kAbort, transaction_id_, msg);
-    ContinueOrDie();
-    if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
-        RemoveFromUpSet(process_id);
-    }
-    else {
-        cout << "P" << get_pid() << ": Msg sent to P" << process_id << ": " << msg << endl;
-    }
-    DecrementNumMessages();
-}
-
-// takes as input the received_msg
-// extracts the core message body from it to extracted_msg
-// extracts transaction id in the received_msg to received_tid
-void Process::ExtractMsg(const string & received_msg, string & extracted_msg, int &received_tid) {
-    std::istringstream iss(received_msg);
-    iss >> extracted_msg;
-    iss >> received_tid;
 }
 
 // Initialize all locks
@@ -574,891 +185,239 @@ void Process::InitializeLocks() {
     }
 }
 
-// kills all alive threads
-void Process::KillAliveThreads() {
-    for (const auto &th : thread_set_alive_) {
-        pthread_cancel(th);
-    }
-}
+void Process::Reset(int coord_id) {
+    set_my_coordinator(coord_id);
 
-// creates a new thread with passed
-// adds the new thread to the thread set
-void Process::CreateThread(pthread_t &thread, void* (*f)(void* ), void* arg) {
-    if (pthread_create(&thread, NULL, f, arg)) {
-        cout << "P" << get_pid() << ": ERROR: Unable to create thread" << endl;
-        pthread_exit(NULL);
-    }
-    AddThreadToSet(thread);
-}
-
-// Especially for alive threads
-// creates a new alive thread with passed
-// adds the new alive thread to the alive_thread set
-void Process::CreateThreadForAlive(pthread_t &thread, void* (*f)(void* ), void* arg) {
-    if (pthread_create(&thread, NULL, f, arg)) {
-        cout << "P" << get_pid() << ": ERROR: Unable to create thread" << endl;
-        pthread_exit(NULL);
-    }
-    AddThreadToSetAlive(thread);
-}
-
-// creates one receive alive thread
-// creates one send-alive thread
-void Process::CreateAliveThreads(vector<pthread_t> &receive_alive_threads, pthread_t &send_alive_thread) {
-
-    int n = up_.size();
-    //
-    rcv_alive_thread_arg.clear();
-    rcv_alive_thread_arg.resize(n);
-
-    // ReceiveAliveThreadArgument **rcv_thread_arg = new ReceiveAliveThreadArgument*[n];
-
-    int i = 0;
-    for (auto it = up_.begin(); it != up_.end(); ++it ) {
-        rcv_alive_thread_arg[i] = new ReceiveAliveThreadArgument;
-        rcv_alive_thread_arg[i]->p = this;
-        rcv_alive_thread_arg[i]->pid_from_whom = *it;
-        CreateThreadForAlive(receive_alive_threads[i], ReceiveAlive, (void *)rcv_alive_thread_arg[i]);
-        i++;
-    }
-    // CreateThread(receive_alive_thread, ReceiveAlive, (void *)this);
-    CreateThreadForAlive(send_alive_thread, SendAlive, (void *)this);
-}
-
-void Process::CreateUpThread(int process_id, pthread_t &up_receive_thread) {
-    ReceiveSDRUpThreadArgument* rcv_up_thread_arg = new ReceiveSDRUpThreadArgument;
-    rcv_up_thread_arg-> p = this;
-    rcv_up_thread_arg->for_whom = process_id;
-    CreateThread(up_receive_thread, ReceiveUp, (void *)rcv_up_thread_arg);
-}
-
-
-void Process::CreateSDRThread(int process_id, pthread_t &sdr_receive_thread) {
-    ReceiveSDRUpThreadArgument* rcv_sdr_thread_arg = new ReceiveSDRUpThreadArgument;
-    rcv_sdr_thread_arg-> p = this;
-    rcv_sdr_thread_arg->for_whom = process_id;
-    CreateThread(sdr_receive_thread, ReceiveStateOrDecReq, (void *)rcv_sdr_thread_arg);
-}
-
-void Process::AddToLog(string s, bool new_round)
-{
-    pthread_mutex_lock(&log_lock);
-
-    if (new_round)
-    {
-        vector<string> new_trans_log;
-        new_trans_log.push_back(s);
-        log_[transaction_id_] = new_trans_log;
-
-        stringstream ss;
-        ss << "TID: " << to_string(transaction_id_) << endl << s;
-        s = ss.str();
-    }
-
-    else
-        log_[transaction_id_].push_back(s);
-
-    ofstream outfile(log_file_.c_str(), fstream::app);
-    if (outfile.is_open())
-        outfile << s << endl;
-
-    else
-        cout << "couldn't open" << log_file_ << endl;
-
-    pthread_mutex_unlock(&log_lock);
-    outfile.close();
-    return;
-}
-
-void Process::LoadLogAndPrevDecisions()
-{
-    string line;
-    vector<string> trans_log;
-    int round_id;
-    ifstream myfile(log_file_);
-    if (myfile.is_open())
-    {
-        while (getline(myfile, line))
-        {
-            if (line.empty())
-                continue;
-
-            size_t found = line.find("TID:");
-            if (found != string::npos)
-            {
-                string id = line.substr(5);
-                round_id = atoi(id.c_str());
-            }
-            else
-            {
-                log_[round_id].push_back(line);
-            }
-
-            if (line == "commit")
-                prev_decisions_.push_back(COMMIT);
-            else if (line == "abort")
-                prev_decisions_.push_back(ABORT);
-
-        }
-        myfile.close();
-    }
-    else
-    {
-        cout << "Failed to load log file" << endl;
-    }
-}
-
-void Process::LoadTransactionId()
-{
-    if (!log_.empty())
-        transaction_id_ = log_.rbegin()->first;
-    // cout<<transaction_id_<<endl;}
-
-    else
-        cout << "Error. Log empty" << endl;
-}
-
-bool Process::CheckCoordinator()
-{
-    transaction_id_ = (log_.rbegin())->first;
-    size_t found = log_[transaction_id_][0].find("start");
-    if (found != string::npos)
-        return true;
-    else
-        return false;
-}
-
-void Process::LoadUp()
-{
-    vector<string> cur_trans_log = log_[transaction_id_];
-    vector<string> temp;
+    log_.clear();
     up_.clear();
-    for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
-    {
-        temp = split(*it, ' ');
-        if (temp[0] == "up:")
-        {
-            temp = split(temp[1], ',');
-            for (auto it = temp.begin(); it != temp.end(); it++)
-                up_.insert(atoi((*it).c_str()));
-            return;
-        }
-    }
-}
-
-
-
-string Process::GetDecision()
-{
-    //null string means no decision
-    vector<string> cur_trans_log = log_[transaction_id_];
-    for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
-    {
-        if (   (*it) == "commit" || (*it) == "abort" || (*it) == "precommit" )
-            return *it;
-    }
-    return "";
-}
-
-string Process::GetVote()
-{
-    vector<string> cur_trans_log = log_[transaction_id_];
-    for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
-    {
-        if ( (*it) == "yes" )
-            return *it;
-
-        // else if ( (*it) == "abort")
-        //     return *it;
-    }
-
-    return "";
-}
-
-void Process::LoadParticipants()
-{
-    //assumes first entry in round will have participants. change if not
-    string entry = log_[transaction_id_][0];
-
-    vector<string> tokens = split(entry, ' ');
-
+    thread_set_alive_.clear();
     participants_.clear();
+    participant_state_map_.clear();
 
-    vector<string> rv = split(tokens[2], ',');
-    for (vector<string>::iterator it = rv.begin(); it < rv.end(); it++)
-    {
-        participants_.insert(atoi((*it).c_str()));
+    transaction_id_ = -1;
+    my_state_ = UNINITIALIZED;
+    newcoord_thread = 0;
+    new_coord_thread_made = false;
+    state_req_in_progress = false;
+    num_messages_ = INT_MAX;
+    handshake_ = BLANK;
+}
+// reads the playlist file
+// loads it into playlist_ unordered map
+bool Process::LoadPlaylist() {
+    ifstream fin;
+    fin.exceptions ( ifstream::failbit | ifstream::badbit );
+    try {
+        fin.open(playlist_file_.c_str());
+        string song_name;
+        string song_url;
+        while (!fin.eof()) {
+            fin >> song_name;
+            fin >> song_url;
+            playlist_.insert(make_pair(song_name, song_url));
+        }
+        fin.close();
+        return true;
+    } catch (ifstream::failure e) {
+        cout << e.what() << endl;
+        if (fin.is_open()) fin.close();
+        return false;
     }
-
-    participants_.insert(atoi(tokens[1].c_str()));
-
-
 }
 
-int Process::GetCoordinator()
+//----------------------GETTERS--------------------------------------------------
+
+int Process::get_pid() {
+    return pid_;
+}
+
+int Process::get_server_sockfd() {
+    return server_sockfd_;
+}
+
+int Process::get_transaction_id() {
+    return transaction_id_;
+}
+// get socket fd corresponding to process_id's send connection
+int Process::get_fd(int process_id) {
+    if (process_id == INT_MAX) return -1;
+    int ret;
+    pthread_mutex_lock(&fd_lock);
+    ret = fd_[process_id];
+    pthread_mutex_unlock(&fd_lock);
+    return ret;
+}
+// get socket fd corresponding to process_id's alive connection
+int Process::get_alive_fd(int process_id) {
+    if (process_id == INT_MAX) return -1;
+    int ret;
+    pthread_mutex_lock(&alive_fd_lock);
+    ret = alive_fd_[process_id];
+    pthread_mutex_unlock(&alive_fd_lock);
+    return ret;
+}
+
+int Process::get_up_fd(int process_id) {
+    if (process_id == INT_MAX) return -1;
+    int ret;
+    pthread_mutex_lock(&up_fd_lock);
+    ret = up_fd_[process_id];
+    pthread_mutex_unlock(&up_fd_lock);
+    return ret;
+}
+
+int Process::get_sdr_fd(int process_id) {
+    if (process_id == INT_MAX) return -1;
+    int ret;
+    pthread_mutex_lock(&sdr_fd_lock);
+    ret = sdr_fd_[process_id];
+    pthread_mutex_unlock(&sdr_fd_lock);
+    return ret;
+}
+
+ProcessRunningStatus Process::get_my_status() {
+    return my_status_;
+}
+
+ProcessState Process::get_my_state()
 {
-    if (CheckCoordinator())
-        return pid_;
-    else
-    {
-        string entry = log_[transaction_id_][0];
-        vector<string> tokens = split(entry, ' ');
-        if (tokens[0] == "votereq")
-        {
-            return atoi(tokens[1].c_str());
-        }
-    }
+    ProcessState local;
+    pthread_mutex_lock(&my_state_lock);
+    local = my_state_;
+    pthread_mutex_unlock(&my_state_lock);
+    return local;
 }
 
-// void Process::set_decision_reached(bool v)
-// {
-//     pthread_mutex_lock(&decision_reached_lock);
-//     decision_reached_ = v;
-//     pthread_mutex_unlock(&decision_reached_lock);
-// }
-// bool Process::get_decision_reached()
-// {
-//     bool v;
-//     pthread_mutex_lock(&decision_reached_lock);
-//     v = decision_reached_;
-//     pthread_mutex_unlock(&decision_reached_lock);
-//     return v;
-// }
-
-
-//sets my_state_ accd to log and calls termination protocol
-void Process::Recovery()
+int Process::get_my_coordinator()
 {
-    LoadLogAndPrevDecisions();
-
-    LoadTransactionId();
-    if (transaction_id_ == -1)
-        return;
-
-    LoadParticipants();
-    LoadUp();
-    cout << "Transaction id: " << transaction_id_ << endl;
-    cout << "Up set: ";
-    for (auto const &p : up_) {
-        cout << p << " ";
-    }
-    cout << endl;
-    cout << "Participants: ";
-    for (auto const &p : participants_) {
-        cout << p << " ";
-    }
-    cout << endl;
-
-
-    for (auto const &p : participants_) {
-        if (p == get_pid()) continue;
-        if (ConnectToProcess(p))
-        {
-            if (ConnectToProcessSDR(p)) {
-                ConnectToProcessUp(p);
-            }
-            else
-                cout << "P" << get_pid() << ": Unable to connect sdr to P" << p << endl;
-
-        } else {
-            //TODO: I don't think we need to do anything special
-            // apart from not adding participant_[i] to the upset.
-            cout << "P" << get_pid() << ": Unable to connect to P" << p << endl;
-        }
-    }
-
-    // pthread_t send_alive_thread;
-    // vector<pthread_t> receive_alive_threads(up_.size());
-    // CreateAliveThreads(receive_alive_threads, send_alive_thread);
-
-    // one sdr receive thread for each participant, not just those in up_
-    // because any participant could ask for Dec Req in future.
-    // size = participant_.size()-1 because it contains self
-    vector<pthread_t> sdr_receive_threads(participants_.size() - 1);
-    vector<pthread_t> up_receive_threads(participants_.size() - 1);
-    int i = 0;
-    for (auto it = participants_.begin(); it != participants_.end(); ++it) {
-        //make sure you don't create a SDR receive thread for self
-        if (*it == get_pid()) continue;
-        CreateSDRThread(*it, sdr_receive_threads[i]);
-        CreateUpThread(*it, up_receive_threads[i]);
-        i++;
-    }
-
-    string decision = GetDecision();
-
-    //probably need to send the decision to others
-
-    if (decision == "commit")
-    {
-        my_state_ = COMMITTED;
-        cout << "Had received commit" << endl;
-    }
-
-    else if (decision == "abort")
-    {
-        my_state_ = ABORTED;
-        cout << "Had received abort" << endl;
-    }
-
-    else if (decision == "precommit")
-    {
-        my_state_ = COMMITTABLE;
-        SetUpAndWaitRecovery();
-        LogCommitOrAbort();
-
-        // bool local_decreached = false;
-        // pthread_mutex_lock(&decision_reached_lock);
-        // set_decision_reached(false);
-        // pthread_mutex_unlock(&decision_reached_lock);
-        // while(!local_decreached)
-        // {
-        //     sleep(kGeneralSleep);
-        //     pthread_mutex_lock(&decision_reached_lock);
-        //     local_decreached = get_decision_reached();
-        //     pthread_mutex_unlock(&decision_reached_lock);
-        // }
-
-    }
-
-    else
-    {   //no decision
-        string vote = GetVote();
-        if (vote == "yes")
-        {
-            cout << "Had voted yes" << endl;
-            my_state_ = UNCERTAIN;
-            SetUpAndWaitRecovery();
-            LogCommitOrAbort();
-        }
-        else if (vote.empty())
-        {
-            cout << "Hadnt voted. So aborting" << endl;
-            my_state_ = ABORTED;
-            LogAbort();
-        }
-    }
-
+    int mc;
+    pthread_mutex_lock(&my_coord_lock);
+    mc = my_coordinator_;
+    pthread_mutex_unlock(&my_coord_lock);
+    return mc;
 }
 
-void Process::SetUpAndWaitRecovery()
+Handshake Process::get_handshake() {
+    return handshake_;
+}
+
+int Process::get_num_messages() {
+    int num;
+    pthread_mutex_lock(&num_messages_lock);
+    num = num_messages_;
+    pthread_mutex_unlock(&num_messages_lock);
+    return num;
+}
+
+//-------------------SETTERS-----------------------------------------------------
+
+void Process::set_pid(int process_id) {
+    pid_ = process_id;
+}
+
+void Process::set_log_file(string logfile) {
+    log_file_ = logfile;
+}
+
+void Process::set_playlist_file(string playlistfile) {
+    playlist_file_ = playlistfile;
+}
+
+void Process::set_my_coordinator(int process_id) {
+    pthread_mutex_lock(&my_coord_lock);
+    my_coordinator_ = process_id;
+    pthread_mutex_unlock(&my_coord_lock);
+
+    set_coordinator(process_id);
+}
+
+void Process::set_transaction_id(int tid) {
+    transaction_id_ = tid;
+}
+
+void Process::set_server_sockfd(int socket_fd) {
+    server_sockfd_ = socket_fd;
+}
+// TODO: remember to set _fd_ to -1 on connection close
+// saves socket fd for connection from a send port
+void Process::set_fd(int process_id, int new_fd) {
+    cout << "P" << get_pid() << ": for P" << process_id << ": old=" << get_fd(process_id);
+    pthread_mutex_lock(&fd_lock);
+    if (fd_[process_id] == -1)
+    {
+        fd_[process_id] = new_fd;
+    }
+    pthread_mutex_unlock(&fd_lock);
+    cout << ": new=" << get_fd(process_id) << endl;
+}
+
+void Process::set_up_fd(int process_id, int new_fd) {
+    pthread_mutex_lock(&up_fd_lock);
+    if (up_fd_[process_id] == -1)
+    {
+        up_fd_[process_id] = new_fd;
+    }
+    pthread_mutex_unlock(&up_fd_lock);
+}
+
+// TODO: remember to set fd_ to -1 on connection close
+// saves socket fd for connection from a send port
+void Process::set_sdr_fd(int process_id, int new_fd) {
+    pthread_mutex_lock(&sdr_fd_lock);
+    if (sdr_fd_[process_id] == -1)
+    {
+        sdr_fd_[process_id] = new_fd;
+    }
+    pthread_mutex_unlock(&sdr_fd_lock);
+}
+
+void Process::set_alive_fd(int process_id, int new_fd) {
+    pthread_mutex_lock(&alive_fd_lock);
+    if (alive_fd_[process_id] == -1)
+    {
+        alive_fd_[process_id] = new_fd;
+    }
+    pthread_mutex_unlock(&alive_fd_lock);
+}
+
+void Process::set_my_status(ProcessRunningStatus status) {
+    my_status_ = status;
+}
+
+void Process::set_my_state(ProcessState state)
 {
-    pthread_t decision_request_thread, total_failure_thread;
-    CreateThread(decision_request_thread, SendDecReq, (void *)this);
-    CreateThread(total_failure_thread, SendUpReq, (void *)this);
-    void* status;
-    pthread_join(decision_request_thread, &status);
-    pthread_join(total_failure_thread, &status);
-    RemoveThreadFromSet(decision_request_thread);
-    RemoveThreadFromSet(total_failure_thread);
+    pthread_mutex_lock(&my_state_lock);
+    my_state_ = state;
+    pthread_mutex_unlock(&my_state_lock);
 }
 
-void Process::LogCommitOrAbort()
-{
-    cout << "Decided. My state is ";
-    if (get_my_state() == ABORTED)
-    {
-        LogAbort();
-        cout << "Aborted" << endl;
-    }
-    else if (get_my_state() == COMMITTED)
-    {
-        cout << "Commited" << endl;
-        LogCommit();
-    }
-}
-
-
-void Process::Timeout()
-{
-    TerminationProtocol();
-}
-
-
-void Process::WaitForDecisionResponse() {
-    int n = participants_.size();
-    std::vector<pthread_t> receive_thread(n - 1);
-
-    ReceiveDecThreadArgument **rcv_thread_arg = new ReceiveDecThreadArgument*[n - 1];
-    int i = 0;
-    for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
-        if (*it == get_pid()) continue;
-
-        rcv_thread_arg[i] = new ReceiveDecThreadArgument;
-        rcv_thread_arg[i]->p = this;
-        rcv_thread_arg[i]->pid = *it;
-        rcv_thread_arg[i]->transaction_id = transaction_id_;
-        // rcv_thread_arg[i]->decision;
-
-        CreateThread(receive_thread[i], ReceiveDecision, (void *)rcv_thread_arg[i]);
-        i++;
-    }
-
-    void* status;
-
-    i = 0;
-    for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
-        if (*it == get_pid()) continue;
-
-        pthread_join(receive_thread[i], &status);
-        RemoveThreadFromSet(receive_thread[i]);
-        if (get_my_state() == COMMITTED || get_my_state() == ABORTED)
-            return;
-        i++;
-    }
-}
-
-void* ReceiveDecision(void* _rcv_thread_arg)
-{
-    ReceiveDecThreadArgument *rcv_thread_arg = (ReceiveDecThreadArgument *)_rcv_thread_arg;
-    int pid = rcv_thread_arg->pid;
-    int tid = rcv_thread_arg->transaction_id;
-    Process *p = rcv_thread_arg->p;
-
-    // ofstream outf("log/decresponse/" + to_string(p->get_pid()) + "from" + to_string(pid));
-
-    // if (!outf.is_open())
-    //     cout << "Failed to open log file for decresponse" << endl;
-
-    char buf[kMaxDataSize];
-    int num_bytes;
-    //TODO: write code to extract multiple messages
-
-    fd_set temp_set;
-    FD_ZERO(&temp_set);
-    FD_SET(p->get_fd(pid), &temp_set);
-    int fd_max = p->get_fd(pid);
-    int rv;
-    rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
-    if (rv == -1) { //error in select
-        cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << endl;
-        rcv_thread_arg->received_msg_type = ERROR;
-    } else if (rv == 0) {   //timeout
-        rcv_thread_arg->received_msg_type = TIMEOUT;
-    } else {    // activity happened on the socket
-        if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
-            cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
-            rcv_thread_arg->received_msg_type = ERROR;
-        } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
-            // if participant closes connection, it is equivalent to it crashing
-            // can treat it as TIMEOUT
-            // TODO: verify argument
-            rcv_thread_arg->received_msg_type = TIMEOUT;
-            //TODO: handle connection close based on different cases
-        } else {
-            buf[num_bytes] = '\0';
-            cout << "P" << p->get_pid() << ": DecMsg received from P" << pid << ": ";
-            if (buf[0] == '0')
-                cout << "Abort" << endl;
-            else if (buf[1] == '1')
-                cout << "Commit" << endl;
-            else
-                cout << buf << endl;
-
-            string extracted_msg;
-            int received_tid;
-            // in this case, we don't care about the received_tid,
-            // because it will surely be for the transaction under consideration
-            p->ExtractMsg(string(buf), extracted_msg, received_tid);
-
-            Decision msg = static_cast<Decision>(atoi(extracted_msg.c_str()));
-            // rcv_thread_arg->decision = msg;
-
-            if ((msg) == COMMIT)
-            {
-                p->set_my_state(COMMITTED);
-            }
-            else if ((msg) == ABORT)
-            {
-                p->set_my_state(ABORTED);
-            }
-
-
-
-            //assumes that correct message type is sent by participant
-        }
-    }
-    // cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
-    return NULL;
-}
-
-void* SendDecReq(void *_p) {
-    Process *p = (Process *)_p;
-    p->DecisionRequest();
-    return NULL;
-}
-
-void Process::SendDecReqToAll(const string & msg) {
-
-    //this only contains operational processes for non timeout cases
-    for ( auto it = participants_.begin(); it != participants_.end(); ++it ) {
-        if ((*it) == get_pid()) continue; // do not send to self
-        cout << "P" << get_pid() << ": sdr_fd for P" << (*it) << "=" << get_sdr_fd(*it) << endl;
-        ContinueOrDie();
-        if (send(get_sdr_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR1: sending to P" << (*it) << endl;
-            // RemoveFromUpSet(*it);
-            // no need to update up set
-        }
-        else {
-            // cout << "P" << get_pid() << ": Msg sent to P" << (*it) << ": " << msg << endl;
-        }
-        DecrementNumMessages();
-    }
-}
-
-bool Process::CheckAliveEqualsIntersection()
-{
-    assert (all_up_sets_.size() != 0);
-    set<int> intersection_up(up_);
-    set<int> alive_processes_now;
-    cout << "alive_processes_now: ";
-    for (auto iter = all_up_sets_.begin(); iter != all_up_sets_.end(); iter++)
-    {
-        set_intersection(intersection_up.begin(), intersection_up.end(), iter->second.begin(), iter->second.end(),
-                         std::inserter(intersection_up, intersection_up.begin()));
-        alive_processes_now.insert(iter->first);
-        cout << iter->first << " ";
-    }
-    cout << endl;
-    cout << "intersection: ";
-    for (auto it = intersection_up.begin(); it != intersection_up.end(); it++)
-        cout << *it << " ";
-    cout << endl;
-    return (intersection_up == alive_processes_now);
-}
-
-void Process::DecisionRequest()
-{
-    string msg;
-    string msg_to_send = kDecReq;
-    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    //if total failure, then init termination protocol with total failure. give arg to TP
-    ProcessState local_my_state;
-
-    // sleep(15);
-    while (true)
-    {
-        cout << "Starting dec req to all " << endl;
-        SendDecReqToAll(msg);
-        WaitForDecisionResponse();
-        local_my_state = get_my_state();
-
-        if (local_my_state == ABORTED)
-        {
-            break;
-        }
-        else if (local_my_state == COMMITTED)
-        {
-            break;
-        }
-        // usleep(kDecReqTimeout);
-    }
-    return;
-}
-
-void Process::TotalFailureCheck()
-{
-    ProcessState local_my_state;
-
-    while (true)
-    {
-        // break;
-        cout << "Starting total failure check" << endl;
-        SendUpReqToAll();
-        // WaitForUpResponse();
-        // cout<<"returned to total failure"<<endl;
-        all_up_sets_[get_pid()] = up_; //add mine to allupsets
-        usleep(kGeneralTimeout);
-
-        bool is_total_failure = CheckAliveEqualsIntersection();
-        if (!is_total_failure)
-            cout << "Intersection doesnt match" << endl;
-
-        local_my_state = get_my_state();
-
-        if (local_my_state == ABORTED)
-        {
-            break;
-        }
-        else if (local_my_state == COMMITTED)
-        {
-            break;
-        }
-        // usleep(kUpReqTimeout);
-    }
-}
-
-void Process::TerminationProtocol()
-{   //called when a process times out.
-
-    //reset statereq variable
-    // state_req_in_progress = true;
-    //sets new coord
-    cout << "TerminationProtocol by" << get_pid() << " at " << time(NULL) % 100 << endl;
-    // bool status = false;
-    // while(!status){
-    ElectionProtocol();
-
-
-    // if(my_coordinator_==1)
-    //     cout << "P" << pid_ << ": my new coordinator=one"<< endl;
-    // else if(my_coordinator_==2)
-    //     cout << "P" << pid_ << ": my new coordinator=two"<< endl;
-
-    if (pid_ == get_my_coordinator())
-    {   //coord case
-        //pass on arg saying total failue, then send to all
-        void* status;
-        bool templ = false;
-        pthread_mutex_lock(&new_coord_lock);
-
-        if (!new_coord_thread_made)
-        {
-            new_coord_thread_made = true;
-            templ = true;
-        }
-
-        pthread_mutex_unlock(&new_coord_lock);
-        if (templ) {
-            CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
-            pthread_join(newcoord_thread, &status);
-            RemoveThreadFromSet(newcoord_thread);
-        }
-
-    }
-    else
-    {
-        pthread_mutex_lock(&state_req_lock);
-        state_req_in_progress = false;
-        pthread_mutex_unlock(&state_req_lock);
-
-        SendURElected(get_my_coordinator());
-        usleep(kGeneralTimeout);
-
-        bool temp_sr = false;
-
-        pthread_mutex_lock(&state_req_lock);
-        temp_sr = state_req_in_progress;
-        pthread_mutex_unlock(&state_req_lock);
-
-        if (temp_sr)
-            return;
-        TerminationProtocol();
-
-        // WaitForStateRequest();
-        //wait for 3 sec
-        //check if state req has been received using shared memory
-
-
-        //then do nothing here, the initial SR thread will see that a SR message is here
-        //so that replies state and does all that shit
-        //till we get a decision
-        // TerminationParticipantMode();
-    }
-    // }
-}
 void Process::set_state_req_in_progress(bool val)
 {
     pthread_mutex_lock(&state_req_lock);
     state_req_in_progress = val;
     pthread_mutex_unlock(&state_req_lock);
 }
-
-void Process::ElectionProtocol()
-{
-    int min = GetNewCoordinator();
-    set_my_coordinator(min);
-
+//TODO: handshake lock
+void Process::set_handshake(Handshake hs) {
+    handshake_ = hs;
 }
 
-bool Process::SendURElected(int recp)
-{
-    //send it on SR thread only
-    string msg;
-    string msg_to_send = kURElected;
-    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    bool ret;
-
-    ContinueOrDie();
-    if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
-        RemoveFromUpSet(recp);
-        ret = false;
-    }
-    else {
-        cout << "P" << get_pid() << ": URElected Msg sent to P" << recp << ": " << msg << endl;
-        ret = true;
-    }
-    DecrementNumMessages();
-    return ret;
+void Process::set_num_messages(int num) {
+    pthread_mutex_lock(&num_messages_lock);
+    num_messages_ = num;
+    pthread_mutex_unlock(&num_messages_lock);
 }
 
-int Process::GetNewCoordinator()
-{
-    // ofstream ofile("log/selectnewcoord"+to_string(get_pid())+","+to_string(time(NULL)%100));
-    int min;
-    pthread_mutex_lock(&up_lock);
-    set<int> copy_up(up_);
-    pthread_mutex_unlock(&up_lock);
-
-    for ( auto it = copy_up.cbegin(); it != copy_up.cend(); ++it )
-    {
-        // ofile<<*it;
-        if (it == copy_up.cbegin())
-            min = (*it);
-        else
-        {
-            if (*it < min)
-                min = *it;
-        }
-    }
-
-    if (min > get_pid())
-        min = get_pid();
-    // ofile<<"min: "<<min<<endl;
-    return min;
+void Process::DecrementNumMessages() {
+    set_num_messages(get_num_messages() - 1);
 }
 
-//initial ones just to maintain uniformity. can be removed if want to handle string while calling
-void Process::LogCommit()
-{
-    AddToLog("commit");
+//-----------------------CLOSEFD,RESET-------------------------------------------------
+
+void Process::Close_server_sockfd() {
+    close(server_sockfd_) ;
 }
 
-void Process::LogPreCommit()
-{
-    AddToLog("precommit");
-}
-void Process::LogAbort()
-{
-    AddToLog("abort");
-}
-
-void Process::LogYes()
-{
-    AddToLog("yes");
-}
-
-void Process::LogVoteReq()
-{
-
-    string s = "votereq";
-    s += " ";
-    s += to_string(get_my_coordinator());
-    s += " ";
-
-    // for(int i=0; i<participants_.size(); i++)
-    for ( auto it = participants_.begin(); it != participants_.end(); ++it )
-    {
-        if (it != participants_.begin())
-            s += ",";
-        s += to_string(*it);
-    }
-
-    AddToLog(s, true);
-}
-
-void Process::LogStart()
-{
-    string s = "start";
-    s += " ";
-    s += to_string(pid_);
-    s += " ";
-    // for (const auto& ps : participant_state_map_) {
-    //     if(&ps!=participant_state_map_.begin())
-    //         s+=",";
-    //     s+=to_string(ps.first);
-    // }
-
-    for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it )
-    {
-        if (it != participant_state_map_.begin())
-            s += ",";
-        s += to_string(it->first);
-    }
-
-    AddToLog(s, true);
-}
-
-void Process::LogUp()
-{
-    string s = "up:";
-    s += " ";
-    //TODO:mutex lock up
-    pthread_mutex_lock(&up_lock);
-    set<int> copy_up_ = up_;
-    pthread_mutex_unlock(&up_lock);
-
-    for ( auto it = copy_up_.begin(); it != copy_up_.end(); ++it )
-    {
-        if (it != copy_up_.begin())
-            s += ",";
-        s += to_string(*it);
-    }
-    AddToLog(s);
-}
-
-void Process::SendState(int recp)
-{
-    string msg;
-    string msg_to_send = to_string((int)my_state_);
-    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    // cout << "trying to send st to " << recp << endl;
-    if (recp == INT_MAX)
-        return;
-    ContinueOrDie();
-    if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
-        RemoveFromUpSet(recp);
-    }
-    else {
-        cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
-    }
-    DecrementNumMessages();
-}
-
-void Process::SendDecision(int recp)
-{
-    string msg;
-    int code_to_send;
-    if (my_state_ == COMMITTED)
-        code_to_send = COMMIT;
-    else if (my_state_ == ABORTED)
-        code_to_send = ABORT;
-    string msg_to_send = to_string(code_to_send);
-    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    cout << get_fd(recp) << " " << recp << endl;
-    ContinueOrDie();
-    if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        timeval aftertime;
-        gettimeofday(&aftertime, NULL);
-        cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
-        RemoveFromUpSet(recp);
-    }
-    else {
-        // cout << "P" << get_pid() << ": decision Msg sent to P" << recp << ": " << msg << endl;
-    }
-    DecrementNumMessages();
-}
-
-void Process::SendPrevDecision(int recp, int tid)
-{
-    string msg;
-    int code_to_send = prev_decisions_[tid];
-    string msg_to_send = to_string(code_to_send);
-    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    ContinueOrDie();
-    if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
-        RemoveFromUpSet(recp);
-    }
-    else {
-        cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
-    }
-    DecrementNumMessages();
-}
 void Process::CloseUpFDs()
 {
     for (auto it = up_fd_.begin(); it != up_fd_.end(); it++)
@@ -1493,6 +452,138 @@ void Process::CloseSDRFDs()
         if ((*it) != -1)
             close(*it);
     }
+}
+
+void Process::reset_fd(int process_id) {
+    // cout<<"P"<<get_pid()<<"reseting"<<process_id<<endl;
+    pthread_mutex_lock(&fd_lock);
+    close(fd_[process_id]);
+    fd_[process_id] = -1;
+    pthread_mutex_unlock(&fd_lock);
+}
+
+void Process::reset_up_fd(int process_id){
+    pthread_mutex_lock(&up_fd_lock);
+    close(up_fd_[process_id]);
+    up_fd_[process_id] = -1;
+    pthread_mutex_unlock(&up_fd_lock);
+}
+
+void Process::reset_alive_fd(int process_id) {
+    pthread_mutex_lock(&alive_fd_lock);
+    close(alive_fd_[process_id]);
+    alive_fd_[process_id] = -1;
+    pthread_mutex_unlock(&alive_fd_lock);
+}
+
+void Process::reset_sdr_fd(int process_id) {
+    pthread_mutex_lock(&sdr_fd_lock);
+    close(sdr_fd_[process_id]);
+    sdr_fd_[process_id] = -1;
+    pthread_mutex_unlock(&sdr_fd_lock);
+}
+
+//------------------------------------------------------------------------
+
+// print function for debugging purposes
+void Process::Print() {
+    cout << "pid=" << get_pid() << " ";
+    for (int i = 0; i < N; ++i) {
+        cout << get_fd(i) << ",";
+    }
+    cout << endl;
+}
+
+//------------------------------------------------------------------------
+
+// constructs general msgs of form (without quotes)
+// "<msgbody> <transaction_id> $"
+// works for following message bodies
+// msg_body = ABORT,
+// outputs constructed msg in msg
+void Process::ConstructGeneralMsg(const string & msg_body,
+                                  const int transaction_id, string & msg) {
+    msg = msg_body + " " + to_string(transaction_id) + " $" ;
+}
+
+// takes as input the received_msg
+// extracts the core message body from it to extracted_msg
+// extracts transaction id in the received_msg to received_tid
+void Process::ExtractMsg(const string & received_msg, string & extracted_msg, int &received_tid) {
+    std::istringstream iss(received_msg);
+    iss >> extracted_msg;
+    iss >> received_tid;
+}
+
+// process's voting function based on the loaded
+// playlist and the transaction trans
+// sets my_state_ accordingly
+void Process::Vote(string trans) {
+    std::istringstream iss(trans);
+    string transaction_type, song_name;
+    iss >> transaction_type;
+    iss >> song_name;
+    if (transaction_type == kAdd) {
+        if (playlist_.find(song_name) != playlist_.end()) {
+            // song_name already exists. Vote NO
+            my_state_ = ABORTED;
+        } else {
+            my_state_ = UNCERTAIN;
+        }
+    } else if (transaction_type == kRemove) {
+        if (playlist_.find(song_name) == playlist_.end()) {
+            // song_name does not exist. Vote NO
+            my_state_ = ABORTED;
+        } else {
+            my_state_ = UNCERTAIN;
+        }
+    } else if (transaction_type == kEdit) {
+        string new_name, new_url;
+        iss >> new_name;
+        iss >> new_url;
+        if (playlist_.find(song_name) == playlist_.end()) {
+            // song_name does not exist. Vote NO
+            my_state_ = ABORTED;
+        } else {
+            // song_name exists.
+            // Check if the new_name already exists
+            if (playlist_.find(new_name) != playlist_.end()) {
+                //new_name already exists. Can't edit. Vote NO
+                my_state_ = ABORTED;
+            } else {
+                // song_name can be edited to new_name and new_url. Vote YES
+                my_state_ = UNCERTAIN;
+            }
+        }
+    }
+}
+
+// returns if num_messages_ is positive
+// otherwise kills the process itself
+void Process::ContinueOrDie() {
+    if (get_num_messages() <= 0) {
+        Die();
+    }
+}
+
+// closes all its FDs
+// cancels all its threads
+// removes itself from Controller's alive process set
+// kills itself
+void Process::Die() {
+    CloseFDs();
+    CloseSDRFDs();
+    CloseUpFDs();
+    CloseAliveFDs();
+    Close_server_sockfd();
+    for (const auto &th : thread_set) {
+        pthread_cancel(th);
+    }
+    for (const auto &th : thread_set_alive_) {
+        pthread_cancel(th);
+    }
+    RemoveFromAliveProcessIds(pthread_self());
+    pthread_cancel(pthread_self());
 }
 
 vector<string> split(string s, char delimiter)
