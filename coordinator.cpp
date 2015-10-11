@@ -50,6 +50,7 @@ void Process::SendVoteReqToAll(const string &msg) {
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
         }
+        DecrementNumMessages();
     }
 }
 
@@ -66,6 +67,7 @@ void Process::SendStateReqToAll(const string &msg) {
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
         }
+        DecrementNumMessages();
     }
 }
 
@@ -202,6 +204,7 @@ void Process::SendPreCommitToAll() {
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
         }
+        DecrementNumMessages();
     }
 }
 
@@ -216,6 +219,7 @@ void Process::SendPreCommitToProcess(int process_id) {
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << process_id << ": " << msg << endl;
     }
+    DecrementNumMessages();
 }
 
 
@@ -233,6 +237,7 @@ void Process::SendCommitToAll() {
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
         }
+        DecrementNumMessages();
     }
 }
 

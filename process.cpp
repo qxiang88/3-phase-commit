@@ -476,6 +476,7 @@ void Process::SendAbortToProcess(int process_id) {
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << process_id << ": " << msg << endl;
     }
+    DecrementNumMessages();
 }
 
 // takes as input the received_msg
@@ -1004,6 +1005,7 @@ void Process::SendDecReqToAll(const string & msg) {
         else {
             cout << "P" << get_pid() << ": Msg sent to P" << (*it) << ": " << msg << endl;
         }
+        DecrementNumMessages();
     }
 }
 
@@ -1097,17 +1099,20 @@ bool Process::SendURElected(int recp)
     string msg;
     string msg_to_send = kURElected;
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    bool ret;
+
     WaitOrProceed();
     if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
         RemoveFromUpSet(recp);
-        return false;
+        ret = false;
     }
     else {
         cout << "P" << get_pid() << ": URElected Msg sent to P" << recp << ": " << msg << endl;
-        return true;
+        ret = true;
     }
-
+    DecrementNumMessages();
+    return ret;
 }
 
 int Process::GetNewCoordinator()
@@ -1231,6 +1236,7 @@ void Process::SendState(int recp)
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
     }
+    DecrementNumMessages();
 }
 
 void Process::SendDecision(int recp)
@@ -1254,6 +1260,7 @@ void Process::SendDecision(int recp)
     else {
         cout << "P" << get_pid() << ": decision Msg sent to P" << recp << ": " << msg << endl;
     }
+    DecrementNumMessages();
 }
 
 void Process::SendPrevDecision(int recp, int tid)
@@ -1270,6 +1277,7 @@ void Process::SendPrevDecision(int recp, int tid)
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
     }
+    DecrementNumMessages();
 }
 
 void Process::CloseFDs()

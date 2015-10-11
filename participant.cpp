@@ -140,6 +140,7 @@ void Process::SendMsgToCoordinator(const string &msg_to_send) {
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << mc << ": " << msg << endl;
     }
+    DecrementNumMessages();
 }
 
 // waits for PRE-COMMIT or ABORT from coordinator
