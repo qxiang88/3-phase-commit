@@ -132,7 +132,7 @@ void Process::SendMsgToCoordinator(const string &msg_to_send) {
     int mc = get_my_coordinator();
     if (mc == INT_MAX)
         return;
-    WaitOrProceed();
+    ContinueOrDie();
     if (send(get_fd(mc), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << mc << endl;
         RemoveFromUpSet(my_coordinator_);

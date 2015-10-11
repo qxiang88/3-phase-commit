@@ -32,9 +32,6 @@ public:
     void KillLeader();
     void ResurrectAll();
     void SetMessageCount(int process_id, int num_messages);
-    void PauseProtocol();
-    void ResumeMessages(int process_id);
-
 
 
 
@@ -56,10 +53,9 @@ public:
     void KillProcess(int process_id);
 
 
-
-
 protected:
     static int N;
+    static unordered_set<int> alive_process_ids_;
 
 private:
     static std::vector<int> listen_port_;
@@ -83,7 +79,6 @@ private:
     std::vector<pthread_t> process_thread_;
     static std::vector<string> transaction_;
     static int coordinator_;
-    unordered_set<int> alive_process_ids_;
 
 };
 

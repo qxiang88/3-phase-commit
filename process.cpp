@@ -2,7 +2,7 @@
 #include "constants.h"
 #include "limits.h"
 #include "fstream"
-#include <assert.h> 
+#include <assert.h>
 #include "sstream"
 #include "iostream"
 #include "unistd.h"
@@ -130,7 +130,6 @@ void Process::Initialize(int pid,
     new_coord_thread_made = false;
     server_sockfd_ = -1;
     num_messages_ = INT_MAX;
-    resume_ = false;
     handshake_ = BLANK;
 }
 
@@ -149,7 +148,6 @@ void Process::Reset(int coord_id) {
     new_coord_thread_made = false;
     state_req_in_progress = false;
     num_messages_ = INT_MAX;
-    resume_ = false;
     handshake_ = BLANK;
 }
 
@@ -211,7 +209,7 @@ void Process::reset_fd(int process_id) {
     pthread_mutex_unlock(&fd_lock);
 }
 
-void Process::reset_up_fd(int process_id){
+void Process::reset_up_fd(int process_id) {
     pthread_mutex_lock(&up_fd_lock);
     close(up_fd_[process_id]);
     up_fd_[process_id] = -1;
@@ -366,20 +364,6 @@ void Process::DecrementNumMessages() {
     set_num_messages(get_num_messages() - 1);
 }
 
-bool Process::get_resume() {
-    int res;
-    pthread_mutex_lock(&resume_lock);
-    res = resume_;
-    pthread_mutex_unlock(&resume_lock);
-    return res;
-}
-
-void Process::set_resume(bool res) {
-    pthread_mutex_lock(&resume_lock);
-    resume_ = res;
-    pthread_mutex_unlock(&resume_lock);
-}
-
 // print function for debugging purposes
 void Process::Print() {
     cout << "pid=" << get_pid() << " ";
@@ -432,18 +416,32 @@ bool Process::LoadPlaylist() {
     }
 }
 
-// returns immediately if resume_ is true
-// if resume is false, waits till num_messages_ is positive
-void Process::WaitOrProceed() {
-    if (get_resume()) {
-        return; // if resume is true, then ignore num_messages_ and let 3PC run
-    } else {
-        // resume is false. Check value of num_messages_
-        // waits till num_messages_ is positive
-        while (get_num_messages() <= 0) {
-            usleep(kMiniSleep);
-        }
+// returns if num_messages_ is positive
+// otherwise kills the process itself
+void Process::ContinueOrDie() {
+    if (get_num_messages() <= 0) {
+        Die();
     }
+}
+
+// closes all its FDs
+// cancels all its threads
+// removes itself from Controller's alive process set
+// kills itself
+void Process::Die() {
+    CloseFDs();
+    CloseSDRFDs();
+    CloseUpFDs();
+    CloseAliveFDs();
+    Close_server_sockfd();
+    for (const auto &th : thread_set) {
+        pthread_cancel(th);
+    }
+    for (const auto &th : thread_set_alive_) {
+        pthread_cancel(th);
+    }
+    RemoveFromAliveProcessIds(pthread_self());
+    pthread_cancel(pthread_self());
 }
 
 // process's voting function based on the loaded
@@ -503,7 +501,7 @@ void Process::ConstructGeneralMsg(const string & msg_body,
 void Process::SendAbortToProcess(int process_id) {
     string msg;
     ConstructGeneralMsg(kAbort, transaction_id_, msg);
-    WaitOrProceed();
+    ContinueOrDie();
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
         RemoveFromUpSet(process_id);
@@ -856,7 +854,7 @@ void Process::Recovery()
         if (p == get_pid()) continue;
         if (ConnectToProcess(p))
         {
-            if(ConnectToProcessSDR(p)){
+            if (ConnectToProcessSDR(p)) {
                 ConnectToProcessUp(p);
             }
             else
@@ -920,7 +918,7 @@ void Process::Recovery()
         //     local_decreached = get_decision_reached();
         //     pthread_mutex_unlock(&decision_reached_lock);
         // }
-        
+
     }
 
     else
@@ -957,15 +955,15 @@ void Process::SetUpAndWaitRecovery()
 
 void Process::LogCommitOrAbort()
 {
-    cout<<"Decided. My state is ";
-    if(get_my_state()==ABORTED)
+    cout << "Decided. My state is ";
+    if (get_my_state() == ABORTED)
     {
         LogAbort();
-        cout<<"Aborted"<<endl;
+        cout << "Aborted" << endl;
     }
-    else if(get_my_state()==COMMITTED)
+    else if (get_my_state() == COMMITTED)
     {
-        cout<<"Commited"<<endl;
+        cout << "Commited" << endl;
         LogCommit();
     }
 }
@@ -1004,7 +1002,7 @@ void Process::WaitForDecisionResponse() {
 
         pthread_join(receive_thread[i], &status);
         RemoveThreadFromSet(receive_thread[i]);
-        if(get_my_state()==COMMITTED || get_my_state()==ABORTED)
+        if (get_my_state() == COMMITTED || get_my_state() == ABORTED)
             return;
         i++;
     }
@@ -1097,7 +1095,7 @@ void Process::SendDecReqToAll(const string & msg) {
     for ( auto it = participants_.begin(); it != participants_.end(); ++it ) {
         if ((*it) == get_pid()) continue; // do not send to self
         cout << "P" << get_pid() << ": sdr_fd for P" << (*it) << "=" << get_sdr_fd(*it) << endl;
-        WaitOrProceed();
+        ContinueOrDie();
         if (send(get_sdr_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR1: sending to P" << (*it) << endl;
             // RemoveFromUpSet(*it);
@@ -1112,23 +1110,23 @@ void Process::SendDecReqToAll(const string & msg) {
 
 bool Process::CheckAliveEqualsIntersection()
 {
-    assert (all_up_sets_.size()!=0);
+    assert (all_up_sets_.size() != 0);
     set<int> intersection_up(up_);
     set<int> alive_processes_now;
-    cout<<"alive_processes_now: ";
-    for(auto iter = all_up_sets_.begin(); iter!=all_up_sets_.end(); iter++)
+    cout << "alive_processes_now: ";
+    for (auto iter = all_up_sets_.begin(); iter != all_up_sets_.end(); iter++)
     {
-        set_intersection(intersection_up.begin(),intersection_up.end(),iter->second.begin(),iter->second.end(),
-                  std::inserter(intersection_up,intersection_up.begin()));
+        set_intersection(intersection_up.begin(), intersection_up.end(), iter->second.begin(), iter->second.end(),
+                         std::inserter(intersection_up, intersection_up.begin()));
         alive_processes_now.insert(iter->first);
-        cout<<iter->first<<" ";
+        cout << iter->first << " ";
     }
-    cout<<endl;
-    cout<<"intersection: ";
-    for(auto it = intersection_up.begin(); it!=intersection_up.end(); it++)
-        cout<<*it<<" ";
-    cout<<endl;
-    return (intersection_up==alive_processes_now);
+    cout << endl;
+    cout << "intersection: ";
+    for (auto it = intersection_up.begin(); it != intersection_up.end(); it++)
+        cout << *it << " ";
+    cout << endl;
+    return (intersection_up == alive_processes_now);
 }
 
 void Process::DecisionRequest()
@@ -1142,7 +1140,7 @@ void Process::DecisionRequest()
     // sleep(15);
     while (true)
     {
-        cout<<"Starting dec req to all "<<endl;
+        cout << "Starting dec req to all " << endl;
         SendDecReqToAll(msg);
         WaitForDecisionResponse();
         local_my_state = get_my_state();
@@ -1157,7 +1155,7 @@ void Process::DecisionRequest()
         }
         // usleep(kDecReqTimeout);
     }
-    return;   
+    return;
 }
 
 void Process::TotalFailureCheck()
@@ -1167,7 +1165,7 @@ void Process::TotalFailureCheck()
     while (true)
     {
         // break;
-        cout<<"Starting total failure check"<<endl;
+        cout << "Starting total failure check" << endl;
         SendUpReqToAll();
         // WaitForUpResponse();
         // cout<<"returned to total failure"<<endl;
@@ -1175,11 +1173,11 @@ void Process::TotalFailureCheck()
         usleep(kGeneralTimeout);
 
         bool is_total_failure = CheckAliveEqualsIntersection();
-        if(!is_total_failure)
-            cout<<"Intersection doesnt match"<<endl;
+        if (!is_total_failure)
+            cout << "Intersection doesnt match" << endl;
 
         local_my_state = get_my_state();
-        
+
         if (local_my_state == ABORTED)
         {
             break;
@@ -1283,7 +1281,7 @@ bool Process::SendURElected(int recp)
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     bool ret;
 
-    WaitOrProceed();
+    ContinueOrDie();
     if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
         RemoveFromUpSet(recp);
@@ -1410,7 +1408,7 @@ void Process::SendState(int recp)
     // cout << "trying to send st to " << recp << endl;
     if (recp == INT_MAX)
         return;
-    WaitOrProceed();
+    ContinueOrDie();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
         RemoveFromUpSet(recp);
@@ -1432,7 +1430,7 @@ void Process::SendDecision(int recp)
     string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     cout << get_fd(recp) << " " << recp << endl;
-    WaitOrProceed();
+    ContinueOrDie();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         timeval aftertime;
         gettimeofday(&aftertime, NULL);
@@ -1451,7 +1449,7 @@ void Process::SendPrevDecision(int recp, int tid)
     int code_to_send = prev_decisions_[tid];
     string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    WaitOrProceed();
+    ContinueOrDie();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
         RemoveFromUpSet(recp);

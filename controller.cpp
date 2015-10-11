@@ -8,6 +8,7 @@
 
 int Controller::N;
 int Controller::coordinator_;
+std::unordered_set<int> Controller::alive_process_ids_;
 std::vector<int> Controller::listen_port_;
 std::vector<int> Controller::send_port_;
 std::vector<int> Controller::alive_port_;
@@ -388,24 +389,6 @@ void Controller::ResurrectAll() {
 // sets num_messages_ value for the given process
 void Controller::SetMessageCount(int process_id, int num_messages) {
     process_[process_id].set_num_messages(num_messages);
-}
-
-// sets pause_protocol_ to true
-// this effectively lets the current state stablize
-// no process either sends any 3PC related msg during this phase
-// no process delivers any received 3PC related msg during this phase
-// no delivery does not mean timing out on receive. Effectively, timeout clock is paused
-// void Controller::PauseProtocol() {
-//     for (const auto &p : alive_process_ids_) {
-//         process_.set_pause_protocol(true);
-//     }
-// }
-
-// sets resume_ flag to true for process_id
-// this effectively lets that process to resume 3PC related message-passing
-// by ignoring num_messages_ value
-void Controller::ResumeMessages(int process_id) {
-    process_[process_id].set_resume(true);
 }
 
 bool InitializeLocks() {

@@ -42,7 +42,7 @@ void Process::SendVoteReqToAll(const string &msg) {
         // if ((it->first) == get_pid()) continue; // do not send to self
         cout << "P" << get_pid() << ": fd for" << it->first << "=" << get_fd(it->first) << endl;
 
-        WaitOrProceed();
+        ContinueOrDie();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -59,7 +59,7 @@ void Process::SendStateReqToAll(const string &msg) {
     //this only contains operational processes for non timeout cases
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
-        WaitOrProceed();
+        ContinueOrDie();
         if (send(get_sdr_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -196,7 +196,7 @@ void Process::SendPreCommitToAll() {
     ConstructGeneralMsg(kPreCommit, transaction_id_, msg);
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
-        WaitOrProceed();
+        ContinueOrDie();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
@@ -211,7 +211,7 @@ void Process::SendPreCommitToAll() {
 void Process::SendPreCommitToProcess(int process_id) {
     string msg;
     ConstructGeneralMsg(kPreCommit, transaction_id_, msg);
-    WaitOrProceed();
+    ContinueOrDie();
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
         RemoveFromUpSet(process_id);
@@ -229,7 +229,7 @@ void Process::SendCommitToAll() {
     ConstructGeneralMsg(kCommit, transaction_id_, msg);
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
-        WaitOrProceed();
+        ContinueOrDie();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
