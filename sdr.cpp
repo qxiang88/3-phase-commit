@@ -18,7 +18,7 @@ extern pthread_mutex_t new_coord_lock;
 
 bool Process::ConnectToProcessSDR(int process_id) {
     if (get_sdr_fd(process_id) != -1) return true;
-    cout << get_pid() << " " << process_id << endl;
+    // cout << get_pid() << " " << process_id << endl;
     int sockfd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *clientinfo, *l;
 

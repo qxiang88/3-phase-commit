@@ -31,6 +31,7 @@ extern pthread_mutex_t my_coord_lock;
 extern pthread_mutex_t my_state_lock;
 extern pthread_mutex_t num_messages_lock;
 extern pthread_mutex_t resume_lock;
+
 void Process::AddToLog(string s, bool new_round)
 {
     pthread_mutex_lock(&log_lock);
@@ -149,9 +150,11 @@ void Process::LoadUp()
             temp = split(temp[1], ',');
             for (auto it = temp.begin(); it != temp.end(); it++)
                 up_.insert(atoi((*it).c_str()));
-            return;
+            break;
         }
     }
+    up_.insert(get_pid());
+    return;
 }
 
 

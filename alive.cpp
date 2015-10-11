@@ -26,6 +26,7 @@ void Process::RemoveFromUpSet(int k) {
     bool log = false;
     pthread_mutex_lock(&up_lock);
     if (up_.find(k) != up_.end()) {
+        // cout<<"~~~~"<<endl;
         up_.erase(k);
         log = true;
     }

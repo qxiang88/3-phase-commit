@@ -44,7 +44,7 @@ void Process::SendVoteReqToAll(const string &msg) {
 
         ContinueOrDie();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
+            cout << "P" << get_pid() << ": ERROR: sending votereq to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
         }
         else {
@@ -61,7 +61,7 @@ void Process::SendStateReqToAll(const string &msg) {
         // if ((it->first) == get_pid()) continue; // do not send to self
         ContinueOrDie();
         if (send(get_sdr_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
+            cout << "P" << get_pid() << ": ERROR: sending state req to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
         }
         else {
@@ -198,7 +198,7 @@ void Process::SendPreCommitToAll() {
         // if ((it->first) == get_pid()) continue; // do not send to self
         ContinueOrDie();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
+            cout << "P" << get_pid() << ": ERROR: sending pc to all P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
         }
         else {
@@ -213,7 +213,7 @@ void Process::SendPreCommitToProcess(int process_id) {
     ConstructGeneralMsg(kPreCommit, transaction_id_, msg);
     ContinueOrDie();
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
+        cout << "P" << get_pid() << ": ERROR: sending pc to P" << process_id << endl;
         RemoveFromUpSet(process_id);
     }
     else {
@@ -231,7 +231,7 @@ void Process::SendCommitToAll() {
         // if ((it->first) == get_pid()) continue; // do not send to self
         ContinueOrDie();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending to P" << (it->first) << endl;
+            cout << "P" << get_pid() << ": ERROR: sending c to all: to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
         }
         else {
@@ -534,6 +534,8 @@ void Process::CoordinatorMode() {
         LogPreCommit();
         SendPreCommitToAll();
         WaitForAck();
+        return;
+        
         // return;
         LogCommit();
         my_state_ = COMMITTED;

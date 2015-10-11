@@ -152,15 +152,121 @@ void Process::Recovery()
 
 }
 
+
+void Process::TerminationProtocol()
+{   //called when a process times out.
+
+    //reset statereq variable
+    // state_req_in_progress = true;
+    //sets new coord
+    cout << "TerminationProtocol by" << get_pid() << " at " << time(NULL) % 100 << endl;
+    // bool status = false;
+    // while(!status){
+    ElectionProtocol();
+
+
+    // if(my_coordinator_==1)
+    //     cout << "P" << pid_ << ": my new coordinator=one"<< endl;
+    // else if(my_coordinator_==2)
+    //     cout << "P" << pid_ << ": my new coordinator=two"<< endl;
+
+    if (pid_ == get_my_coordinator())
+    {   //coord case
+        //pass on arg saying total failue, then send to all
+        void* status;
+        bool templ = false;
+        pthread_mutex_lock(&new_coord_lock);
+
+        if (!new_coord_thread_made)
+        {
+            new_coord_thread_made = true;
+            templ = true;
+        }
+
+        pthread_mutex_unlock(&new_coord_lock);
+        if (templ) {
+            CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
+            pthread_join(newcoord_thread, &status);
+            RemoveThreadFromSet(newcoord_thread);
+        }
+
+    }
+    else
+    {
+        pthread_mutex_lock(&state_req_lock);
+        state_req_in_progress = false;
+        pthread_mutex_unlock(&state_req_lock);
+
+        SendURElected(get_my_coordinator());
+        usleep(kGeneralTimeout);
+
+        bool temp_sr;
+
+        pthread_mutex_lock(&state_req_lock);
+        temp_sr = state_req_in_progress;
+        pthread_mutex_unlock(&state_req_lock);
+
+        if (temp_sr)
+            return;
+        
+        TerminationProtocol();
+
+        // WaitForStateRequest();
+        //wait for 3 sec
+        //check if state req has been received using shared memory
+
+
+        //then do nothing here, the initial SR thread will see that a SR message is here
+        //so that replies state and does all that shit
+        //till we get a decision
+        // TerminationParticipantMode();
+    }
+    // }
+    cout<<"TerminationProtocol done"<<endl;
+}
+
+void Process::ElectionProtocol()
+{
+    int min = GetNewCoordinator();
+    set_my_coordinator(min);
+
+}
+
+int Process::GetNewCoordinator()
+{
+    // ofstream ofile("log/selectnewcoord"+to_string(get_pid())+","+to_string(time(NULL)%100));
+    int min;
+    pthread_mutex_lock(&up_lock);
+    set<int> copy_up(up_);
+    pthread_mutex_unlock(&up_lock);
+
+    for ( auto it = copy_up.cbegin(); it != copy_up.cend(); ++it )
+    {
+        // ofile<<*it;
+        if (it == copy_up.cbegin())
+            min = (*it);
+        else
+        {
+            if (*it < min)
+                min = *it;
+        }
+    }
+
+    if (min > get_pid())
+        min = get_pid();
+    // ofile<<"min: "<<min<<endl;
+    return min;
+}
+
 void Process::SetUpAndWaitRecovery()
 {
     pthread_t decision_request_thread, total_failure_thread;
-    CreateThread(decision_request_thread, SendDecReq, (void *)this);
+    // CreateThread(decision_request_thread, SendDecReq, (void *)this);
     CreateThread(total_failure_thread, SendUpReq, (void *)this);
     void* status;
-    pthread_join(decision_request_thread, &status);
+    // pthread_join(decision_request_thread, &status);
     pthread_join(total_failure_thread, &status);
-    RemoveThreadFromSet(decision_request_thread);
+    // RemoveThreadFromSet(decision_request_thread);
     RemoveThreadFromSet(total_failure_thread);
 }
 
@@ -283,27 +389,6 @@ void* SendDecReq(void *_p) {
     return NULL;
 }
 
-bool Process::CheckAliveEqualsIntersection()
-{
-    assert (all_up_sets_.size() != 0);
-    set<int> intersection_up(up_);
-    set<int> alive_processes_now;
-    cout << "alive_processes_now: ";
-    for (auto iter = all_up_sets_.begin(); iter != all_up_sets_.end(); iter++)
-    {
-        set_intersection(intersection_up.begin(), intersection_up.end(), iter->second.begin(), iter->second.end(),
-                         std::inserter(intersection_up, intersection_up.begin()));
-        alive_processes_now.insert(iter->first);
-        cout << iter->first << " ";
-    }
-    cout << endl;
-    cout << "intersection: ";
-    for (auto it = intersection_up.begin(); it != intersection_up.end(); it++)
-        cout << *it << " ";
-    cout << endl;
-    return (intersection_up == alive_processes_now);
-}
-
 void Process::DecisionRequest()
 {
     string msg;
@@ -333,26 +418,93 @@ void Process::DecisionRequest()
     return;
 }
 
-void Process::TotalFailureCheck()
+bool Process::CheckForTotalFailure(set<int> &intersection_up, vector<bool> &crashed, bool &operational_process_exists)
+{
+    // set<int> intersection_up(up_);
+    // set<int> alive_processes_now;
+    // cout<<"alive_processes_now: ";
+    set<int> alive_processes_now;
+
+    //what happens if someone doesnt send up set now
+    for(auto iter = all_up_sets_.begin(); iter!=all_up_sets_.end(); iter++)
+    {
+        alive_processes_now.insert(iter->first);
+        if(iter->second.find(iter->first)==iter->second.end())
+            {
+                crashed[iter->first] = false;
+                operational_process_exists = true;
+                cout<<"Operational process exists "<<iter->first<<endl;
+                return false;
+            }
+        else
+            crashed[iter->first] = true;
+
+        set_intersection(intersection_up.begin(),intersection_up.end(),iter->second.begin(),iter->second.end(),
+                  inserter(intersection_up,intersection_up.begin()));
+        cout<<iter->first<<" ";
+    }
+    cout<<endl;
+    cout<<"intersection: ";
+    for(auto it = intersection_up.begin(); it!=intersection_up.end(); it++)
+        cout<<*it<<" ";
+    cout<<endl;
+
+    //to check if up is subset of alive
+    //up - alive should be empty
+    set<int> result;
+    set_difference(intersection_up.begin(), intersection_up.end(),alive_processes_now.begin(), alive_processes_now.end(), 
+        inserter(result, result.end()));    
+    intersection_up = result;
+    if (!intersection_up.empty()){
+         
+        if (intersection_up.find(get_pid())!=intersection_up.end())
+        {
+            //if i am in intersection
+            //total failure
+            return true;
+            // TerminationProtocol();
+
+        }
+
+    }
+
+    return false;
+        // if i am in intersection:
+        //     if any other not failed in intersection:
+        //         skip
+        //     else
+        //             init term  prot
+        // else:
+        //     do nothing
+        // i
+}
+
+void Process::TotalFailure()
 {
     ProcessState local_my_state;
 
+    set<int> intersection_up(up_);
+    vector<bool> crashed(participants_.size(), true);
+    bool operational_process_exists = false;
+
     while (true)
     {
-        // break;
-        cout << "Starting total failure check" << endl;
+        cout<<"Starting total failure check"<<endl;
         SendUpReqToAll();
-        // WaitForUpResponse();
-        // cout<<"returned to total failure"<<endl;
-        all_up_sets_[get_pid()] = up_; //add mine to allupsets
         usleep(kGeneralTimeout);
-
-        bool is_total_failure = CheckAliveEqualsIntersection();
-        if (!is_total_failure)
-            cout << "Intersection doesnt match" << endl;
+        
+        operational_process_exists = false;
+        cout<<"abt to enter checking "<<endl;
+        bool is_total_failure = CheckForTotalFailure(intersection_up, crashed, operational_process_exists);
+        if(operational_process_exists)
+            continue;
+        if(!is_total_failure)
+            cout<<"Can't determine total failure"<<endl;
+        else
+            TerminationProtocol();
 
         local_my_state = get_my_state();
-
+        
         if (local_my_state == ABORTED)
         {
             break;
@@ -363,107 +515,4 @@ void Process::TotalFailureCheck()
         }
         // usleep(kUpReqTimeout);
     }
-}
-
-void Process::TerminationProtocol()
-{   //called when a process times out.
-
-    //reset statereq variable
-    // state_req_in_progress = true;
-    //sets new coord
-    cout << "TerminationProtocol by" << get_pid() << " at " << time(NULL) % 100 << endl;
-    // bool status = false;
-    // while(!status){
-    ElectionProtocol();
-
-
-    // if(my_coordinator_==1)
-    //     cout << "P" << pid_ << ": my new coordinator=one"<< endl;
-    // else if(my_coordinator_==2)
-    //     cout << "P" << pid_ << ": my new coordinator=two"<< endl;
-
-    if (pid_ == get_my_coordinator())
-    {   //coord case
-        //pass on arg saying total failue, then send to all
-        void* status;
-        bool templ = false;
-        pthread_mutex_lock(&new_coord_lock);
-
-        if (!new_coord_thread_made)
-        {
-            new_coord_thread_made = true;
-            templ = true;
-        }
-
-        pthread_mutex_unlock(&new_coord_lock);
-        if (templ) {
-            CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
-            pthread_join(newcoord_thread, &status);
-            RemoveThreadFromSet(newcoord_thread);
-        }
-
-    }
-    else
-    {
-        pthread_mutex_lock(&state_req_lock);
-        state_req_in_progress = false;
-        pthread_mutex_unlock(&state_req_lock);
-
-        SendURElected(get_my_coordinator());
-        usleep(kGeneralTimeout);
-
-        bool temp_sr = false;
-
-        pthread_mutex_lock(&state_req_lock);
-        temp_sr = state_req_in_progress;
-        pthread_mutex_unlock(&state_req_lock);
-
-        if (temp_sr)
-            return;
-        TerminationProtocol();
-
-        // WaitForStateRequest();
-        //wait for 3 sec
-        //check if state req has been received using shared memory
-
-
-        //then do nothing here, the initial SR thread will see that a SR message is here
-        //so that replies state and does all that shit
-        //till we get a decision
-        // TerminationParticipantMode();
-    }
-    // }
-}
-
-void Process::ElectionProtocol()
-{
-    int min = GetNewCoordinator();
-    set_my_coordinator(min);
-
-}
-
-int Process::GetNewCoordinator()
-{
-    // ofstream ofile("log/selectnewcoord"+to_string(get_pid())+","+to_string(time(NULL)%100));
-    int min;
-    pthread_mutex_lock(&up_lock);
-    set<int> copy_up(up_);
-    pthread_mutex_unlock(&up_lock);
-
-    for ( auto it = copy_up.cbegin(); it != copy_up.cend(); ++it )
-    {
-        // ofile<<*it;
-        if (it == copy_up.cbegin())
-            min = (*it);
-        else
-        {
-            if (*it < min)
-                min = *it;
-        }
-    }
-
-    if (min > get_pid())
-        min = get_pid();
-    // ofile<<"min: "<<min<<endl;
-    return min;
 }

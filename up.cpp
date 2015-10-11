@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <assert.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -16,6 +17,27 @@ using namespace std;
 
 extern pthread_mutex_t up_fd_lock;
 extern pthread_mutex_t up_lock;
+
+string ConvertSetToString(set<int> a)
+{
+    string rval;
+    for(auto it=a.begin(); it!=a.end(); it++)
+        {
+            if(it!=a.begin())
+                rval+=".";
+            rval+=to_string(*it);
+        }
+    return rval;
+}
+
+set<int> ConvertStringToSet(string s){
+    vector<string> ids = split(s,'.');
+    set<int> rv;
+    for(auto it=ids.begin(); it!=ids.end(); it++)
+        rv.insert(atoi((*it).c_str()));
+    // cout<<"string to set: "<<rv.size()<<endl;
+    return rv;
+}
 
 
 void Process::SendUpReqToAll() {
@@ -28,7 +50,7 @@ void Process::SendUpReqToAll() {
         // cout<<"trying to send to "<<*it<<endl;
         if ((*it) == get_pid()) continue; // do not send to self
         if (send(get_up_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending to P" << (*it) << endl;
+            cout << "P" << get_pid() << ": ERROR: sending up req to P" << (*it) << endl;
         }
         else {
             // cout << "P" << get_pid() << ": Up req sent to P" << (*it) << " on "<<get_up_fd(*it)<<": " << msg << endl;
@@ -184,10 +206,11 @@ void* ReceiveUp(void* _arg) {
                     //if lower upreq got, ignore
                     p->SendMyUp(for_whom);
                 }
-                else
+                else 
                 {//up set received
-                    outf<<"Up Set received"<<endl;
-                    p->all_up_sets_[for_whom] = convertStringToSet(extracted_msg);
+                    // outf<<"Up Set received "<<extracted_msg<<endl;
+                    p->all_up_sets_[for_whom] = ConvertStringToSet(extracted_msg);
+                    outf<<"up set assigned "<< ConvertSetToString(p->all_up_sets_[for_whom])<<endl;
                 }
             }
 
@@ -244,12 +267,15 @@ void Process::ConstructUpResponse(string &msg) {
     msg = msg + " $";
 }
 
+
 string Process::ConvertUpSetToString()
 {
     //adds self if i have not failed
     pthread_mutex_lock(&up_lock);
     set<int> up_copy(up_);
     pthread_mutex_unlock(&up_lock);
+    
+
     string rval;
     for(auto it=up_copy.begin(); it!=up_copy.end(); it++)
         {
@@ -260,20 +286,12 @@ string Process::ConvertUpSetToString()
 
         //check HERE
 
-    if(get_my_status()!=RECOVERY)
-    {
-        rval += ".";
-        rval += to_string(get_pid());
-    }
+    // if(get_my_status()==RECOVERY)
+    // {
+    //     rval += ".";
+    //     rval += to_string(get_pid());
+    // }
     return rval;
-}
-set<int> convertStringToSet(string s){
-    vector<string> ids = split(s,'.');
-    set<int> rv;
-    for(auto it=ids.begin(); it!=ids.end(); it++)
-        rv.insert(atoi((*it).c_str()));
-    // cout<<"string to set: "<<rv.size()<<endl;
-    return rv;
 }
 
 void Process::SendMyUp(int pid_other){
@@ -341,6 +359,6 @@ void Process::SendMyUp(int pid_other){
 
 void* SendUpReq(void *_p) {
     Process *p = (Process *)_p;
-    p->TotalFailureCheck();
+    p->TotalFailure();
     return NULL;
 }

@@ -60,7 +60,7 @@ void* ThreadEntry(void* _p) {
     while (true) {
         int status = p->get_my_status();
         if (status == RECOVERY) {
-            cout << "Resurrecting process " << p->get_pid() << endl;
+            cout << "----------------------------------\nResurrecting process " << p->get_pid() << endl;
             p->Recovery();
             p->set_my_status(DONE);
             cout << "P" << p->get_pid() << ": Recovery mode over" << endl;
