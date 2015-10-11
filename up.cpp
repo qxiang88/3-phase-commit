@@ -50,7 +50,7 @@ void Process::SendUpReqToAll() {
         // cout<<"trying to send to "<<*it<<endl;
         if ((*it) == get_pid()) continue; // do not send to self
         if (send(get_up_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending to P" << (*it) << endl;
+            cout << "P" << get_pid() << ": ERROR: sending up req to P" << (*it) << endl;
         }
         else {
             // cout << "P" << get_pid() << ": Up req sent to P" << (*it) << " on "<<get_up_fd(*it)<<": " << msg << endl;

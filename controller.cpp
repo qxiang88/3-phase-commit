@@ -429,10 +429,11 @@ int main() {
 
             
 
-            sleep(3);
+            sleep(5);
             if (t == 0) 
                 {
                     c.KillProcess(0);
+                    sleep(2);
                     // c.KillProcess(1);
                     // c.KillProcess(2);
                     // // c.KillProcess(3);
@@ -443,8 +444,11 @@ int main() {
             // // // c.KillProcess(1);
             // // // sleep(4);
             // // // c.KillProcess(2);
+            // cout<<endl;
+            // cout<<endl;
+            // cout<<endl;
             sleep(4);
-            if (!c.ResurrectProcess(0)) return 1;
+            // if (!c.ResurrectProcess(0)) return 1;
         }
         usleep(kTransactionSleep);
         t++;

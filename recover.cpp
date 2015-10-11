@@ -195,7 +195,7 @@ void Process::TerminationProtocol()
         SendURElected(get_my_coordinator());
         usleep(kGeneralTimeout);
 
-        bool temp_sr = false;
+        bool temp_sr;
 
         pthread_mutex_lock(&state_req_lock);
         temp_sr = state_req_in_progress;
@@ -203,6 +203,7 @@ void Process::TerminationProtocol()
 
         if (temp_sr)
             return;
+        
         TerminationProtocol();
 
         // WaitForStateRequest();
@@ -216,6 +217,7 @@ void Process::TerminationProtocol()
         // TerminationParticipantMode();
     }
     // }
+    cout<<"TerminationProtocol done"<<endl;
 }
 
 void Process::ElectionProtocol()

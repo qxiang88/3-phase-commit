@@ -26,6 +26,7 @@ void Process::RemoveFromUpSet(int k) {
     bool log = false;
     pthread_mutex_lock(&up_lock);
     if (up_.find(k) != up_.end()) {
+        cout<<"~~~~"<<endl;
         up_.erase(k);
         log = true;
     }
@@ -37,7 +38,6 @@ void Process::RemoveFromUpSet(int k) {
         LogUp();
 
     if (k != INT_MAX) {
-        cout<<"~~~~"<<endl;
         reset_fd(k);
         reset_alive_fd(k);
         reset_sdr_fd(k);

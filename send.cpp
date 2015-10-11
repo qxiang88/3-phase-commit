@@ -43,7 +43,7 @@ void Process::SendState(int recp)
         return;
     ContinueOrDie();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+        cout << "P" << get_pid() << ": ERROR: sending state to P" << recp << endl;
         RemoveFromUpSet(recp);
     }
     else {
@@ -84,7 +84,7 @@ void Process::SendPrevDecision(int recp, int tid)
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     ContinueOrDie();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+        cout << "P" << get_pid() << ": ERROR: sending prev dec to P" << recp << endl;
         RemoveFromUpSet(recp);
     }
     else {
@@ -103,7 +103,7 @@ bool Process::SendURElected(int recp)
 
     ContinueOrDie();
     if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
+        cout << "P" << get_pid() << ": ERROR: sending urelected to P" << recp << endl;
         RemoveFromUpSet(recp);
         ret = false;
     }
@@ -122,7 +122,7 @@ void Process::SendAbortToProcess(int process_id) {
     ConstructGeneralMsg(kAbort, transaction_id_, msg);
     ContinueOrDie();
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << process_id << endl;
+        cout << "P" << get_pid() << ": ERROR: sending abort to P" << process_id << endl;
         RemoveFromUpSet(process_id);
     }
     else {

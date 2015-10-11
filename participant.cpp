@@ -134,7 +134,7 @@ void Process::SendMsgToCoordinator(const string &msg_to_send) {
         return;
     ContinueOrDie();
     if (send(get_fd(mc), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending to P" << mc << endl;
+        cout << "P" << get_pid() << ": ERROR: sending msg to coord to P" << mc << endl;
         RemoveFromUpSet(my_coordinator_);
     }
     else {
@@ -465,9 +465,13 @@ void Process::ParticipantMode() {
         usleep(kGeneralSleep);
     }
     if (my_state_ == ABORTED)
-        prev_decisions_.push_back(ABORT);
+        {
+            prev_decisions_.push_back(ABORT);
+        }
     else
-        prev_decisions_.push_back(COMMIT);
+        {
+            prev_decisions_.push_back(COMMIT);
+        }
 }
 
 
