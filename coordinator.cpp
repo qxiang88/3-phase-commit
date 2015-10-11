@@ -484,9 +484,9 @@ void Process::CoordinatorMode() {
 
     string msg;
     ConstructVoteReq(msg);
-    SendVoteReqToAll(msg);
     LogStart();
     LogUp();
+    SendVoteReqToAll(msg);
 
     pthread_t send_alive_thread;
     vector<pthread_t> receive_alive_threads(up_.size());
