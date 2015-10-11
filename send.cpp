@@ -13,7 +13,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include "limits.h"
-#include <assert.h> 
+#include <assert.h>
 #include "sstream"
 #include <algorithm>
 
@@ -39,8 +39,11 @@ void Process::SendState(int recp)
     string msg_to_send = to_string((int)my_state_);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     // cout << "trying to send st to " << recp << endl;
-    if (recp == INT_MAX)
+    if (recp == INT_MAX) {
+        ContinueOrDie();
+        DecrementNumMessages();
         return;
+    }
     ContinueOrDie();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << recp << endl;
@@ -71,7 +74,7 @@ void Process::SendDecision(int recp)
         RemoveFromUpSet(recp);
     }
     else {
-        // cout << "P" << get_pid() << ": decision Msg sent to P" << recp << ": " << msg << endl;
+        cout << "P" << get_pid() << ": decision Msg sent to P" << recp << ": " << msg << endl;
     }
     DecrementNumMessages();
 }
@@ -145,7 +148,7 @@ void Process::SendDecReqToAll(const string & msg) {
             // no need to update up set
         }
         else {
-            // cout << "P" << get_pid() << ": Msg sent to P" << (*it) << ": " << msg << endl;
+            cout << "P" << get_pid() << ": Msg sent to P" << (*it) << ": " << msg << endl;
         }
         DecrementNumMessages();
     }

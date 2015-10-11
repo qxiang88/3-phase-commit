@@ -40,7 +40,7 @@ void Process::ConstructStateReq(string &msg) {
 void Process::SendVoteReqToAll(const string &msg) {
     for ( auto it = participant_state_map_.begin(); it != participant_state_map_.end(); ++it ) {
         // if ((it->first) == get_pid()) continue; // do not send to self
-        cout << "P" << get_pid() << ": fd for" << it->first << "=" << get_fd(it->first) << endl;
+        // cout << "P" << get_pid() << ": fd for" << it->first << "=" << get_fd(it->first) << endl;
 
         ContinueOrDie();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
@@ -447,19 +447,22 @@ void Process::CoordinatorMode() {
 
     for (const auto &pm : participant_state_map_) {
         if (pm.first == get_pid()) continue;
-        if (ConnectToProcess(pm.first)) 
-        {// setup alive connection to this process
-            if (ConnectToProcessAlive(pm.first)) 
+        if (ConnectToProcess(pm.first))
+        {   // setup alive connection to this process
+            if (ConnectToProcessAlive(pm.first))
             {
-                if(ConnectToProcessSDR(pm.first))
+                if (ConnectToProcessSDR(pm.first))
                 {
-                    ConnectToProcessUp(pm.first);
-                    up_.insert(pm.first);
+                    if (ConnectToProcessUp(pm.first)) {
+                        up_.insert(pm.first);
+                    } else {
+                        cout << "P" << get_pid() << ": Unable to connect UP to P" << pm.first << endl;
+                    }
                 } else {
                     cout << "P" << get_pid() << ": Unable to connect SDR to P" << pm.first << endl;
                 }
             }
-            else{
+            else {
                 // Practically, this should not happen, since it just connected to i.
                 // TODO: not handling this rare case presently
                 // this causes up_ to deviate from participant_state_map_ at the beginning
@@ -556,6 +559,8 @@ void* NewCoordinatorMode(void * _p) {
         if (*it == p->get_pid()) continue;
         if (p->ConnectToProcess(*it))
             p->participant_state_map_.insert(make_pair(*it, UNINITIALIZED));
+        else
+            cout << "P" << p->get_pid() << ": Unable to connect to P" << *it << endl;
     }
     // return NULL;
     string msg;

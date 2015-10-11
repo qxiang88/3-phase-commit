@@ -301,8 +301,8 @@ Handshake Process::get_handshake() {
     return handshake_;
 }
 
-int Process::get_num_messages() {
-    int num;
+float Process::get_num_messages() {
+    float num;
     pthread_mutex_lock(&num_messages_lock);
     num = num_messages_;
     pthread_mutex_unlock(&num_messages_lock);
@@ -341,14 +341,14 @@ void Process::set_server_sockfd(int socket_fd) {
 // TODO: remember to set _fd_ to -1 on connection close
 // saves socket fd for connection from a send port
 void Process::set_fd(int process_id, int new_fd) {
-    cout << "P" << get_pid() << ": for P" << process_id << ": old=" << get_fd(process_id);
+    // cout << "P" << get_pid() << ": for P" << process_id << ": old=" << get_fd(process_id);
     pthread_mutex_lock(&fd_lock);
     if (fd_[process_id] == -1)
     {
         fd_[process_id] = new_fd;
     }
     pthread_mutex_unlock(&fd_lock);
-    cout << ": new=" << get_fd(process_id) << endl;
+    // cout << ": new=" << get_fd(process_id) << endl;
 }
 
 void Process::set_up_fd(int process_id, int new_fd) {
@@ -402,14 +402,10 @@ void Process::set_handshake(Handshake hs) {
     handshake_ = hs;
 }
 
-void Process::set_num_messages(int num) {
+void Process::set_num_messages(float num) {
     pthread_mutex_lock(&num_messages_lock);
     num_messages_ = num;
     pthread_mutex_unlock(&num_messages_lock);
-}
-
-void Process::DecrementNumMessages() {
-    set_num_messages(get_num_messages() - 1);
 }
 
 //-----------------------CLOSEFD,RESET-------------------------------------------------
@@ -564,6 +560,13 @@ void Process::ContinueOrDie() {
     if (get_num_messages() <= 0) {
         Die();
     }
+}
+
+// decrementes num_messages by 1
+// calls Continue or Die to check if it is time to die
+void Process::DecrementNumMessages() {
+    set_num_messages(get_num_messages() - 1);
+    ContinueOrDie();
 }
 
 // closes all its FDs

@@ -13,7 +13,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include "limits.h"
-#include <assert.h> 
+#include <assert.h>
 #include "sstream"
 #include <algorithm>
 
@@ -35,7 +35,8 @@ extern pthread_mutex_t resume_lock;
 //sets my_state_ accd to log and calls termination protocol
 void Process::Recovery()
 {
-    LoadLogAndPrevDecisions();
+    if(LoadLogAndPrevDecisions() == false) 
+        return;
 
     LoadTransactionId();
     if (transaction_id_ == -1)
@@ -60,8 +61,12 @@ void Process::Recovery()
         if (p == get_pid()) continue;
         if (ConnectToProcess(p))
         {
-            if(ConnectToProcessSDR(p)){
-                ConnectToProcessUp(p);
+            if (ConnectToProcessSDR(p)) {
+                if (ConnectToProcessUp(p)) {
+
+                } else {
+                    cout << "P" << get_pid() << ": Unable to connect UP to P" << p << endl;
+                }
             }
             else
                 cout << "P" << get_pid() << ": Unable to connect sdr to P" << p << endl;
@@ -124,7 +129,7 @@ void Process::Recovery()
         //     local_decreached = get_decision_reached();
         //     pthread_mutex_unlock(&decision_reached_lock);
         // }
-        
+
     }
 
     else
@@ -191,7 +196,7 @@ void Process::WaitForDecisionResponse() {
 
         pthread_join(receive_thread[i], &status);
         RemoveThreadFromSet(receive_thread[i]);
-        if(get_my_state()==COMMITTED || get_my_state()==ABORTED)
+        if (get_my_state() == COMMITTED || get_my_state() == ABORTED)
             return;
         i++;
     }
@@ -280,23 +285,23 @@ void* SendDecReq(void *_p) {
 
 bool Process::CheckAliveEqualsIntersection()
 {
-    assert (all_up_sets_.size()!=0);
+    assert (all_up_sets_.size() != 0);
     set<int> intersection_up(up_);
     set<int> alive_processes_now;
-    cout<<"alive_processes_now: ";
-    for(auto iter = all_up_sets_.begin(); iter!=all_up_sets_.end(); iter++)
+    cout << "alive_processes_now: ";
+    for (auto iter = all_up_sets_.begin(); iter != all_up_sets_.end(); iter++)
     {
-        set_intersection(intersection_up.begin(),intersection_up.end(),iter->second.begin(),iter->second.end(),
-                  std::inserter(intersection_up,intersection_up.begin()));
+        set_intersection(intersection_up.begin(), intersection_up.end(), iter->second.begin(), iter->second.end(),
+                         std::inserter(intersection_up, intersection_up.begin()));
         alive_processes_now.insert(iter->first);
-        cout<<iter->first<<" ";
+        cout << iter->first << " ";
     }
-    cout<<endl;
-    cout<<"intersection: ";
-    for(auto it = intersection_up.begin(); it!=intersection_up.end(); it++)
-        cout<<*it<<" ";
-    cout<<endl;
-    return (intersection_up==alive_processes_now);
+    cout << endl;
+    cout << "intersection: ";
+    for (auto it = intersection_up.begin(); it != intersection_up.end(); it++)
+        cout << *it << " ";
+    cout << endl;
+    return (intersection_up == alive_processes_now);
 }
 
 void Process::DecisionRequest()
@@ -310,7 +315,7 @@ void Process::DecisionRequest()
     // sleep(15);
     while (true)
     {
-        cout<<"Starting dec req to all "<<endl;
+        cout << "Starting dec req to all " << endl;
         SendDecReqToAll(msg);
         WaitForDecisionResponse();
         local_my_state = get_my_state();
@@ -325,7 +330,7 @@ void Process::DecisionRequest()
         }
         // usleep(kDecReqTimeout);
     }
-    return;   
+    return;
 }
 
 void Process::TotalFailureCheck()
@@ -335,7 +340,7 @@ void Process::TotalFailureCheck()
     while (true)
     {
         // break;
-        cout<<"Starting total failure check"<<endl;
+        cout << "Starting total failure check" << endl;
         SendUpReqToAll();
         // WaitForUpResponse();
         // cout<<"returned to total failure"<<endl;
@@ -343,11 +348,11 @@ void Process::TotalFailureCheck()
         usleep(kGeneralTimeout);
 
         bool is_total_failure = CheckAliveEqualsIntersection();
-        if(!is_total_failure)
-            cout<<"Intersection doesnt match"<<endl;
+        if (!is_total_failure)
+            cout << "Intersection doesnt match" << endl;
 
         local_my_state = get_my_state();
-        
+
         if (local_my_state == ABORTED)
         {
             break;

@@ -82,7 +82,7 @@ bool Process::ConnectToProcessUp(int process_id) {
     freeaddrinfo(clientinfo); // all done with this structure
     if (l == NULL)  {
         fprintf(stderr, "client: failed to bind\n");
-        exit(1);
+        return false;
     }
 
     sa.sa_handler = sigchld_handler; // reap all dead processes

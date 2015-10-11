@@ -387,7 +387,7 @@ void Controller::ResurrectAll() {
 }
 
 // sets num_messages_ value for the given process
-void Controller::SetMessageCount(int process_id, int num_messages) {
+void Controller::SetMessageCount(int process_id, float num_messages) {
     process_[process_id].set_num_messages(num_messages);
 }
 
@@ -423,21 +423,22 @@ int main() {
             // sets transaction_id_ value for chosen coordinator
             c.InformCoordinatorOfNewTransaction(coord_id, t);
             c.InformCoordiantorOfParticipants(coord_id);
+
+            c.SetMessageCount(0,4);
+            c.SetMessageCount(1,10);
+            c.SetMessageCount(2,10);
+            c.SetMessageCount(3,1);
+            c.SetMessageCount(4,1);
+
             c.SetHandshakeToExpecting();
             c.WaitTillHandshakeReady();
             c.SetCoordHandshakeToInit3PC();
 
+            sleep(7);
+            if (!c.ResurrectProcess(3)) return 1;
+            if (!c.ResurrectProcess(4)) return 1;
+            if (!c.ResurrectProcess(0)) return 1;
             
-
-            // sleep(3);
-            // if (t == 0) c.KillProcess(0);
-            // // if(t==1) c.KillProcess(1);
-            // // // sleep(4);
-            // // // c.KillProcess(1);
-            // // // sleep(4);
-            // // // c.KillProcess(2);
-            // sleep(4);
-            // if (!c.ResurrectProcess(0)) return 1;
         }
         usleep(kTransactionSleep);
         t++;

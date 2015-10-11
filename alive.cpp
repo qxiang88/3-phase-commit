@@ -20,7 +20,7 @@ pthread_mutex_t up_lock;
 
 void Process::RemoveFromUpSet(int k) {
 
-    if(get_my_status()==RECOVERY)
+    if (get_my_status() == RECOVERY)
         return;
 
     bool log = false;
@@ -37,7 +37,7 @@ void Process::RemoveFromUpSet(int k) {
         LogUp();
 
     if (k != INT_MAX) {
-        cout<<"~~~~"<<endl;
+        cout << "~~~~" << endl;
         reset_fd(k);
         reset_alive_fd(k);
         reset_sdr_fd(k);
@@ -96,7 +96,7 @@ bool Process::ConnectToProcessAlive(int process_id) {
     freeaddrinfo(clientinfo); // all done with this structure
     if (l == NULL)  {
         fprintf(stderr, "client: failed to bind\n");
-        exit(1);
+        return false;
     }
 
     sa.sa_handler = sigchld_handler; // reap all dead processes
@@ -190,7 +190,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
         else if ( num_bytes == 0)
         {
             // cout << "P" << p->get_pid() << ": ERROR in receiving ALIVE 0 for P" << pid << " " << endl;
-             // outf << "P" << p->get_pid() << ": ERROR in receiving ALIVE 0 for P" << pid << " " << p->get_alive_fd(pid) << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
+            // outf << "P" << p->get_pid() << ": ERROR in receiving ALIVE 0 for P" << pid << " " << p->get_alive_fd(pid) << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
             p->RemoveFromUpSet(pid);
             p->RemoveThreadFromSetAlive(pthread_self());
             return NULL;
@@ -235,7 +235,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
             buffered_alives.erase(iter);
         }
 
-        start_time = (start_time + kReceiveAliveTimeoutTimeval.tv_sec)%100;
+        start_time = (start_time + kReceiveAliveTimeoutTimeval.tv_sec) % 100;
         sleep((beforetime.tv_sec + 2) - aftertime.tv_sec);
     }
 }
@@ -268,6 +268,7 @@ void* SendAlive(void *_p) {
                 //     // and will remove it from UP set
                 // } else {
                 cout << "P" << p->get_pid() << ": ERROR: sending ALIVE to P" << (*it) << endl;
+                p->RemoveFromUpSet(*it);
                 it++;
                 // }
             }

@@ -31,7 +31,7 @@ public:
     void KillAllProcesses();
     void KillLeader();
     void ResurrectAll();
-    void SetMessageCount(int process_id, int num_messages);
+    void SetMessageCount(int process_id, float num_messages);
 
 
 

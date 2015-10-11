@@ -13,7 +13,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include "limits.h"
-#include <assert.h> 
+#include <assert.h>
 #include "sstream"
 #include <algorithm>
 
@@ -61,11 +61,13 @@ void Process::AddToLog(string s, bool new_round)
     return;
 }
 
-void Process::LoadLogAndPrevDecisions()
+bool Process::LoadLogAndPrevDecisions()
 {
     string line;
     vector<string> trans_log;
     int round_id;
+    bool round_assigned = false;
+    string last_uninserted_up;
     ifstream myfile(log_file_);
     if (myfile.is_open())
     {
@@ -79,23 +81,34 @@ void Process::LoadLogAndPrevDecisions()
             {
                 string id = line.substr(5);
                 round_id = atoi(id.c_str());
+
+                if(!round_assigned && !last_uninserted_up.empty()){
+                log_[round_id].push_back(last_uninserted_up);                    
+                }
+
+                round_assigned = true;;
             }
-            else
+            else if(round_assigned)
             {
                 log_[round_id].push_back(line);
-            }
 
-            if (line == "commit")
-                prev_decisions_.push_back(COMMIT);
-            else if (line == "abort")
-                prev_decisions_.push_back(ABORT);
+                if (line == "commit")
+                    prev_decisions_.push_back(COMMIT);
+                else if (line == "abort")
+                    prev_decisions_.push_back(ABORT);
+            }
+            else{
+                last_uninserted_up = line;
+            }
 
         }
         myfile.close();
+        return true;
     }
     else
     {
         cout << "Failed to load log file" << endl;
+        return false;
     }
 }
 
@@ -109,15 +122,19 @@ void Process::LoadTransactionId()
         cout << "Error. Log empty" << endl;
 }
 
-bool Process::CheckCoordinator()
-{
-    transaction_id_ = (log_.rbegin())->first;
-    size_t found = log_[transaction_id_][0].find("start");
-    if (found != string::npos)
-        return true;
-    else
-        return false;
-}
+// bool Process::CheckCoordinator()
+// {
+//     transaction_id_ = (log_.rbegin())->first;
+//     size_t found;
+//     for(auto it= log_[transaction_id_].begin(); it!=log_[transaction_id_].end(); it++)
+//         {
+//             found = log_[transaction_id_][*it].find("start");
+//             if (found != string::npos)
+//                 return true;
+    
+//         }
+//     return false;
+// }
 
 void Process::LoadUp()
 {
@@ -168,10 +185,18 @@ string Process::GetVote()
 
 void Process::LoadParticipants()
 {
-    //assumes first entry in round will have participants. change if not
-    string entry = log_[transaction_id_][0];
+    string entry;
+    vector<string> tokens;
 
-    vector<string> tokens = split(entry, ' ');
+    //assumes first entry in round will have participants. change if not
+    for (auto i = log_[transaction_id_].begin(); i != log_[transaction_id_].end(); i++)
+    {
+        entry = *i;
+        tokens = split(entry, ' ');
+        if(tokens[0]!="up:")
+            break;
+    }
+    // vector<string> tokens = split(entry, ' ');
 
     participants_.clear();
 
@@ -186,20 +211,26 @@ void Process::LoadParticipants()
 
 }
 
-int Process::GetCoordinator()
-{
-    if (CheckCoordinator())
-        return pid_;
-    else
-    {
-        string entry = log_[transaction_id_][0];
-        vector<string> tokens = split(entry, ' ');
-        if (tokens[0] == "votereq")
-        {
-            return atoi(tokens[1].c_str());
-        }
-    }
-}
+// int Process::GetCoordinator()
+// {
+
+//     transaction_id_ = (log_.rbegin())->first;
+//     size_t found,found2;
+//     for(auto it= log_[transaction_id_].begin(); it!=log_[transaction_id_].end(); it++)
+//         {
+//             found = log_[transaction_id_][*it].find("start");
+//             if (found != string::npos)
+//                 return *it;
+
+//             found2 = log_[transaction_id_][*it].find("votereq");
+//             if(found2!=string::npos)
+//                 {
+//                     entry = log_[transaction_id_][*it];
+//                     vector<string> tokens = split(entry, ' ');
+//                     return atoi(tokens[1].c_str());
+//                 }
+//         }
+// }
 
 
 //initial ones just to maintain uniformity. can be removed if want to handle string while calling
@@ -222,12 +253,12 @@ void Process::LogYes()
     AddToLog("yes");
 }
 
-void Process::LogVoteReq()
+void Process::LogVoteReq(int c_id)
 {
 
     string s = "votereq";
     s += " ";
-    s += to_string(get_my_coordinator());
+    s += to_string(c_id);
     s += " ";
 
     // for(int i=0; i<participants_.size(); i++)
@@ -284,15 +315,15 @@ void Process::LogUp()
 
 void Process::LogCommitOrAbort()
 {
-    cout<<"Decided. My state is ";
-    if(get_my_state()==ABORTED)
+    cout << "Decided. My state is ";
+    if (get_my_state() == ABORTED)
     {
         LogAbort();
-        cout<<"Aborted"<<endl;
+        cout << "Aborted" << endl;
     }
-    else if(get_my_state()==COMMITTED)
+    else if (get_my_state() == COMMITTED)
     {
-        cout<<"Commited"<<endl;
+        cout << "Commited" << endl;
         LogCommit();
     }
 }

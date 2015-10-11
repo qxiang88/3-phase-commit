@@ -74,9 +74,15 @@ bool Process::ExtractFromVoteReq(const string &msg, string &transaction_msg ) {
 // sets the transaction_id_ variable
 // populates participants_ vector
 // DOES NOT populate up_ vector
-bool Process::WaitForVoteReq(string &transaction_msg) {
+// returns coordinator id
+// returns INT_MAX if error
+int Process::WaitForVoteReq(string &transaction_msg) {
     int pid = get_my_coordinator();
-    bool ret;
+    // cout<<get_pid()<<"----------"<<pid<<endl;
+
+    if(pid == INT_MAX) return INT_MAX;
+
+    int ret ;
     char buf[kMaxDataSize];
     int num_bytes;
     //TODO: write code to extract multiple messages
@@ -89,26 +95,29 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
+        ret = INT_MAX;
         // pthread_exit(NULL);
     } else if (rv == 0) {   //timeout
         cout << "TIMEOUT" << endl;
-        my_state_ = ABORTED;
+        // my_state_ = ABORTED;
         RemoveFromUpSet(pid);
-
+        ret = INT_MAX;
     } else {    // activity happened on the socket
-        cout << "P" << get_pid() << ": fd for" << pid << "=" << get_fd(pid) << endl;
+        // cout << "P" << get_pid() << ": fd for" << pid << "=" << get_fd(pid) << endl;
 
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
             RemoveFromUpSet(pid);
+            ret = INT_MAX;
             // pthread_exit(NULL); //TODO: think about whether it should be exit or not
         } else if (num_bytes == 0) {     //connection closed
             cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
             // if coordinator closes connection, it is equivalent to coordinator crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
-            my_state_ = ABORTED;
+            // my_state_ = ABORTED;
             RemoveFromUpSet(pid);
+            ret = INT_MAX;
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
@@ -118,6 +127,7 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
             // because it will surely be for the transaction under consideration
             ret = ExtractFromVoteReq(string(buf), transaction_msg);
             //TODO: handle return bool
+            ret = pid;
         }
     }
     // cout << "P" << get_pid() << ": Receive thread exiting for P" << pid << endl;
@@ -130,8 +140,13 @@ void Process::SendMsgToCoordinator(const string &msg_to_send) {
     string msg;
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     int mc = get_my_coordinator();
-    if (mc == INT_MAX)
+
+    if (mc == INT_MAX) {
+        ContinueOrDie();
+        DecrementNumMessages();
         return;
+    }
+
     ContinueOrDie();
     if (send(get_fd(mc), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending to P" << mc << endl;
@@ -314,8 +329,8 @@ void Process::ReceiveCommitFromCoordinator() {
 
 // ALIVE connect to each process in participants_ list
 // adds them to the UP set.
-void Process::ConstructUpSet() {
-    up_.insert(get_my_coordinator());
+void Process::ConstructUpSet(int coord_id) {
+    up_.insert(coord_id);
     for (auto const &p : participants_) {
         if (p == get_pid()) continue;
         // cout<<p<<endl;
@@ -356,11 +371,15 @@ void Process::ParticipantMode() {
     usleep(kGeneralSleep); //sleep to make sure connections are established
 
     string transaction_msg;
-    if (!WaitForVoteReq(transaction_msg)) {
+    int c_id = WaitForVoteReq(transaction_msg);
+    if (c_id == INT_MAX) {
         // Some error happened in rcving VOTE REQ
         // TODO: check if special actions required
+
+        // no need to do anything else
+        return ;
     } else { // VOTE-REQ received.
-        ConstructUpSet();
+        ConstructUpSet(c_id);
 
         pthread_t send_alive_thread;
         vector<pthread_t> receive_alive_threads(up_.size());
@@ -383,8 +402,8 @@ void Process::ParticipantMode() {
                 CreateUpThread(*it, up_receive_threads[i]);
                 i++;
             }
-            CreateSDRThread(get_my_coordinator(), sdr_receive_threads[i]);
-            CreateUpThread(get_my_coordinator(), up_receive_threads[i]);
+            CreateSDRThread(c_id, sdr_receive_threads[i]);
+            CreateUpThread(c_id, up_receive_threads[i]);
         }
     }
 
@@ -394,7 +413,7 @@ void Process::ParticipantMode() {
     }
 
     //else
-    LogVoteReq();
+    LogVoteReq(c_id);
     LogUp();
     Vote(transaction_msg);
     // Print();

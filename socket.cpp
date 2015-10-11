@@ -122,8 +122,9 @@ bool Process::ConnectToProcess(int process_id) {
         break;
     }
     if (l == NULL) {
-        cout << "P" << get_pid() << ": Client: connect ERROR\n";
-        exit(1);
+        cout << "P" << get_pid() << ": Client: connect ERROR "<<strerror(errno)<<endl;
+        return false;
+        // exit(1);
     }
     int outgoing_port = ntohs(return_port_no((struct sockaddr *)l->ai_addr));
     // cout << "P" << get_pid() << ": Client: connecting to " << outgoing_port << endl ;
@@ -221,7 +222,7 @@ void* server(void* _p) {
             p->set_fd(process_id, new_fd);
             timeval t;
             gettimeofday(&t, NULL);
-            cout << p->get_pid() << "to" << process_id<<"fd="<<p->get_fd(process_id)<<"at"<<t.tv_sec<<","<<t.tv_usec<<endl;
+            // cout << p->get_pid() << "to" << process_id<<"fd="<<p->get_fd(process_id)<<"at"<<t.tv_sec<<","<<t.tv_usec<<endl;
             // cout << "P" << p->get_pid() << ": Server: accepting connection from P"
             // << p->get_send_port_pid_map(incoming_port) << endl;
         } else {

@@ -27,16 +27,16 @@ sdr.o: sdr.cpp controller.h constants.h process.h
 up.o: up.cpp controller.h constants.h process.h
 	g++ -g -std=c++0x -c up.cpp
 
-log.o: up.cpp controller.h constants.h process.h
+log.o: log.cpp controller.h constants.h process.h
 	g++ -g -std=c++0x -c log.cpp
 
-recover.o: up.cpp controller.h constants.h process.h
+recover.o: recover.cpp controller.h constants.h process.h
 	g++ -g -std=c++0x -c recover.cpp
 
-send.o: up.cpp controller.h constants.h process.h
+send.o: send.cpp controller.h constants.h process.h
 	g++ -g -std=c++0x -c send.cpp
 
-thread.o: up.cpp controller.h constants.h process.h
+thread.o: thread.cpp controller.h constants.h process.h
 	g++ -g -std=c++0x -c thread.cpp
 
 clean:
@@ -48,5 +48,5 @@ cleanlog:
 	mkdir log/sendalivelog/
 	mkdir log/sdr/
 	mkdir log/up/
-	./controller
+	# ./controller
 	

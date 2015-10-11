@@ -110,7 +110,7 @@ public:
     void WaitForUpResponse();
     void SendCommitToAll();
     bool ExtractFromVoteReq(const string &msg, string &transaction_msg );
-    bool WaitForVoteReq(string &transaction_msg);
+    int WaitForVoteReq(string &transaction_msg);
     void SendMsgToCoordinator(const string &msg_to_send);
     void ReceivePreCommitOrAbortFromCoordinator();
     void ReceiveAnythingFromCoordinator();
@@ -120,7 +120,7 @@ public:
     void CreateUpThread(int process_id, pthread_t &up_receive_thread);
     void UpdateUpSet(std::set<int> &alive_processes);
     void RemoveFromUpSet(int);
-    void ConstructUpSet();
+    void ConstructUpSet(int coord_id);
     void SendState(int);
     void AddThreadToSet(pthread_t thread);
     void RemoveThreadFromSet(pthread_t thread);
@@ -170,13 +170,13 @@ public:
     string GetDecision();
     bool CheckCoordinator();
     void LoadTransactionId();
-    void LoadLogAndPrevDecisions();
+    bool LoadLogAndPrevDecisions();
     void LoadUp();
     void LogCommit();
     void LogPreCommit();
     void LogAbort();
     void LogYes();
-    void LogVoteReq();
+    void LogVoteReq(int coord_id);
     void LogStart();
     void LogUp();
     void LogCommitOrAbort();
@@ -207,8 +207,8 @@ public:
     void set_my_status(ProcessRunningStatus status);
     void set_server_sockfd(int socket_fd);
     int get_server_sockfd();
-    int get_num_messages();
-    void set_num_messages(int num);
+    float get_num_messages();
+    void set_num_messages(float num);
     void Close_server_sockfd();
     void reset_fd(int process_id);
     void reset_alive_fd(int process_id);
@@ -277,7 +277,10 @@ private:
     int my_coordinator_;
     int transaction_id_;
     // number of messages after which process kills itself
-    int num_messages_;
+    // float value because a value like 2.5 can be used to encode case
+    // where process sends 2 messages and waits for receive
+    // as oppposed to value=2, where process dies immediately after sending msg2
+    float num_messages_;
 
 };
 
