@@ -62,7 +62,7 @@ void Process::SendDecision(int recp)
         code_to_send = ABORT;
     string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    cout << get_fd(recp) << " " << recp << endl;
+    // cout << get_fd(recp) << " " << recp << endl;
     ContinueOrDie();
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         timeval aftertime;
@@ -137,7 +137,7 @@ void Process::SendDecReqToAll(const string & msg) {
     //this only contains operational processes for non timeout cases
     for ( auto it = participants_.begin(); it != participants_.end(); ++it ) {
         if ((*it) == get_pid()) continue; // do not send to self
-        cout << "P" << get_pid() << ": sdr_fd for P" << (*it) << "=" << get_sdr_fd(*it) << endl;
+        // cout << "P" << get_pid() << ": sdr_fd for P" << (*it) << "=" << get_sdr_fd(*it) << endl;
         ContinueOrDie();
         if (send(get_sdr_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
             cout << "P" << get_pid() << ": ERROR1: sending to P" << (*it) << endl;

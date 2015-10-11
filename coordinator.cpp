@@ -531,6 +531,8 @@ void Process::CoordinatorMode() {
         LogPreCommit();
         SendPreCommitToAll();
         WaitForAck();
+        return;
+        
         // return;
         LogCommit();
         my_state_ = COMMITTED;

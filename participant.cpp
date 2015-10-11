@@ -96,7 +96,7 @@ bool Process::WaitForVoteReq(string &transaction_msg) {
         RemoveFromUpSet(pid);
 
     } else {    // activity happened on the socket
-        cout << "P" << get_pid() << ": fd for" << pid << "=" << get_fd(pid) << endl;
+        // cout << "P" << get_pid() << ": fd for" << pid << "=" << get_fd(pid) << endl;
 
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;

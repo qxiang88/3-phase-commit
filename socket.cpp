@@ -221,7 +221,7 @@ void* server(void* _p) {
             p->set_fd(process_id, new_fd);
             timeval t;
             gettimeofday(&t, NULL);
-            cout << p->get_pid() << "to" << process_id<<"fd="<<p->get_fd(process_id)<<"at"<<t.tv_sec<<","<<t.tv_usec<<endl;
+            // cout << p->get_pid() << "to" << process_id<<"fd="<<p->get_fd(process_id)<<"at"<<t.tv_sec<<","<<t.tv_usec<<endl;
             // cout << "P" << p->get_pid() << ": Server: accepting connection from P"
             // << p->get_send_port_pid_map(incoming_port) << endl;
         } else {

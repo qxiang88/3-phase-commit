@@ -429,15 +429,22 @@ int main() {
 
             
 
-            // sleep(3);
-            // if (t == 0) c.KillProcess(0);
+            sleep(3);
+            if (t == 0) 
+                {
+                    c.KillProcess(0);
+                    // c.KillProcess(1);
+                    // c.KillProcess(2);
+                    // // c.KillProcess(3);
+                    // // c.KillProcess(4);
+                }
             // // if(t==1) c.KillProcess(1);
             // // // sleep(4);
             // // // c.KillProcess(1);
             // // // sleep(4);
             // // // c.KillProcess(2);
-            // sleep(4);
-            // if (!c.ResurrectProcess(0)) return 1;
+            sleep(4);
+            if (!c.ResurrectProcess(0)) return 1;
         }
         usleep(kTransactionSleep);
         t++;

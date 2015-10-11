@@ -28,6 +28,7 @@ extern int return_port_no(struct sockaddr *sa);
 extern void sigchld_handler(int s);
 extern vector<string> split(string s, char delimiter);
 extern set<int> convertStringToSet(string s);
+extern string ConvertSetToString(set<int> a);
 extern void PrintUpSet(int, set<int>);
 extern void* SendDecReq(void *_p);
 extern void* SendUpReq(void *_p);
@@ -134,13 +135,13 @@ public:
     void DecrementNumMessages();
     void ContinueOrDie();
     void Die();
+    string ConvertSetToString(set<int> a);
 
     void SendUpReqToAll();
     void SendMyUp(int pid_other);
     void ConstructUpReq(string &msg);
     void ConstructUpResponse(string &msg);
     string ConvertUpSetToString();
-    set<int> convertStringToSet(string s);
     void SetUpAndWaitRecovery();
 
     
@@ -161,8 +162,8 @@ public:
     void WaitForStates();
     void SendDecision(int);
     void SendPrevDecision(int, int);
-    bool CheckAliveEqualsIntersection();
-    void TotalFailureCheck();
+    bool CheckForTotalFailure(set<int> &intersection_up, vector<bool> &crashed, bool &operational_process_exists);
+    void TotalFailure();
     void AddToLog(string s, bool new_round = false);
     int GetCoordinator();
     void LoadParticipants();

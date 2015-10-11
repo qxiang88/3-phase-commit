@@ -60,7 +60,7 @@ void* ThreadEntry(void* _p) {
     while (true) {
         int status = p->get_my_status();
         if (status == RECOVERY) {
-            cout << "Resurrecting process " << p->get_pid() << endl;
+            cout << "----------------------------------\nResurrecting process " << p->get_pid() << endl;
             p->Recovery();
             p->set_my_status(DONE);
             cout << "P" << p->get_pid() << ": Recovery mode over" << endl;
@@ -341,14 +341,14 @@ void Process::set_server_sockfd(int socket_fd) {
 // TODO: remember to set _fd_ to -1 on connection close
 // saves socket fd for connection from a send port
 void Process::set_fd(int process_id, int new_fd) {
-    cout << "P" << get_pid() << ": for P" << process_id << ": old=" << get_fd(process_id);
+    // cout << "P" << get_pid() << ": for P" << process_id << ": old=" << get_fd(process_id);
     pthread_mutex_lock(&fd_lock);
     if (fd_[process_id] == -1)
     {
         fd_[process_id] = new_fd;
     }
     pthread_mutex_unlock(&fd_lock);
-    cout << ": new=" << get_fd(process_id) << endl;
+    // cout << ": new=" << get_fd(process_id) << endl;
 }
 
 void Process::set_up_fd(int process_id, int new_fd) {
