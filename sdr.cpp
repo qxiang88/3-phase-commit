@@ -159,7 +159,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
             for(auto it=all_msgs.begin(); it!=all_msgs.end(); it++)
             {
                 string msg = *it;
-                cout<<*it<<endl;
+                // cout<<*it<<endl;
                 string type_req, buffer_data;
                 int recvd_tid;
                 // buffer_data = string(buf);

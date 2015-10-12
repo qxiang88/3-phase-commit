@@ -456,6 +456,7 @@ void Process::CloseUpFDs()
     {
         if ((*it) != -1)
             close(*it);
+        *it = -1;
     }
 }
 
@@ -465,6 +466,7 @@ void Process::CloseFDs()
     {
         if ((*it) != -1)
             close(*it);
+        *it = -1;
     }
 }
 void Process::CloseAliveFDs()
@@ -474,6 +476,8 @@ void Process::CloseAliveFDs()
     {
         if ((*it) != -1)
             close(*it);
+        *it = -1;
+
     }
 }
 void Process::CloseSDRFDs()
@@ -483,6 +487,8 @@ void Process::CloseSDRFDs()
     {
         if ((*it) != -1)
             close(*it);
+        *it = -1;
+        
     }
 }
 
@@ -593,7 +599,7 @@ void Process::Vote(string trans) {
 // returns if num_messages_ is positive
 // otherwise kills the process itself
 void Process::ContinueOrDie() {
-    if (get_num_messages() <= 0) {
+    if (get_num_messages() < 1) {
         Die();
     }
 }

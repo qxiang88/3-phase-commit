@@ -281,7 +281,7 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << p->get_pid() << ": VOTE-REQ received from P" << pid <<  endl;
+            cout << "P" << p->get_pid() << ": VOTE received from P" << pid <<  endl;
 
             string extracted_msg;
             int received_tid;

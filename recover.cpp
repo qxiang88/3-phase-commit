@@ -385,7 +385,7 @@ void Process::DecisionRequest()
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     //if total failure, then init termination protocol with total failure. give arg to TP
     ProcessState local_my_state;
-
+    cout<<"Sending decision requests"<<endl;
     while (true)
     {
         // outd << "Starting dec req to all " << endl;

@@ -33,6 +33,7 @@ extern string ConvertSetToString(set<int> a);
 extern void PrintUpSet(int, set<int>);
 extern void* SendDecReq(void *_p);
 extern void* SendUpReq(void *_p);
+// extern void* CheckFdReceiveThread(void *_arg);
 
 struct ReceiveSDRUpThreadArgument;
 struct ReceiveAliveThreadArgument;
@@ -150,6 +151,8 @@ public:
     void CloseAliveFDs();
     void CloseSDRFDs();
     void CloseUpFDs();
+    // void CheckFdReceive(int);
+    // void CheckAllFdReceives() ;
 
 
     void Recovery();

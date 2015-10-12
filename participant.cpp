@@ -497,12 +497,67 @@ void Process::ParticipantMode() {
     {
         prev_decisions_.push_back(COMMIT);
     }
+
+
+
+    // CheckAllFdReceives();
+
 }
 
+// void Process::CheckFdReceive(int pid){
+//     int num_bytes;
+//     char buf[kMaxDataSize];
+
+//     while (true) {
+//         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1)
+//         {
+            
+//         }
+//         else if (num_bytes == 0)
+//         { 
+//         }
+//         else
+//         {
+//             buf[num_bytes] = '\0';
+//             vector<string> all_msgs = split(string(buf),'$');
+//             for(auto it=all_msgs.begin(); it!=all_msgs.end(); it++)
+//             {
+//                 string msg = *it;
+//                 cout<<*it<<endl;
+//             }
+//         }
+//         usleep(kGeneralSleep);
+
+//     }
+// }
+
+// void Process::CheckAllFdReceives() {
+//     int n = participants_.size();
+//     std::vector<pthread_t> receive_thread(n);
+
+//     ReceiveSDRUpThreadArgument **rcv_thread_arg = new ReceiveSDRUpThreadArgument*[n];
+//     int i = 0;
+//     for (auto it = participants_.begin(); it != participants_.end(); ++it ) {
+//         rcv_thread_arg[i] = new ReceiveSDRUpThreadArgument;
+//         if(*it==get_pid()){
+//             rcv_thread_arg[i]->for_whom = get_my_coordinator();    
+//         }
+//         else
+//         {
+//         rcv_thread_arg[i]->for_whom = *it;
+            
+//         }
+//         rcv_thread_arg[i]->p = this;
+//         CreateThread(receive_thread[i], CheckFdReceiveThread, (void *)rcv_thread_arg[i]);
+//         i++;
+//     }
+// }
 
 
-// create thread 1 that always receives state requests
-//     if it receives one SR, then create a thread 2 that prepares response and waits for it.
-//     if another SR comes to thread 1, then
-//         if 2 is still waiting for something, kill thread 2
-//         if thread 2 has made a dec and exits, then return state to SR request
+// void* CheckFdReceiveThread(void *_arg) {
+//     ReceiveSDRUpThreadArgument* arg = new ReceiveSDRUpThreadArgument;
+//     Process *p = arg->p;
+//     int for_whom = arg->for_whom;
+//     p->CheckFdReceive(for_whom);
+//     return NULL;
+// }

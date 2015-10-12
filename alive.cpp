@@ -296,6 +296,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
         pthread_testcancel();
 
     }
+    // cout<<"Rec Alive exiting"<<endl;
     return NULL;
 }
 
@@ -349,7 +350,7 @@ void* SendAlive(void *_p) {
         pthread_testcancel();
         usleep(kSendAliveInterval);
     }
-    cout << "AliveExiting" << endl;
+    // cout << "AliveExiting" << endl;
 
     return NULL;
 }

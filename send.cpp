@@ -76,7 +76,8 @@ void Process::SendDecision(int recp)
         RemoveFromUpSet(recp);
     }
     else {
-        cout << "P" << get_pid() << ": DEC sent to P" << recp << ": " << msg << endl;
+        cout << "P" << get_pid() << ": DEC sent to P" << recp << ": " <<endl; 
+        // msg << endl;
     }
     DecrementNumMessages();
 }
@@ -86,7 +87,7 @@ void Process::SendPrevDecision(int recp, int tid)
     string msg;
     int code_to_send = prev_decisions_[tid];
     string msg_to_send = to_string(code_to_send);
-    ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
+    ConstructGeneralMsg(msg_to_send, tid, msg);
     ContinueOrDie();
     if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         // cout << "P" << get_pid() << ": ERROR: sending prev dec to P" << recp << endl;
@@ -154,7 +155,7 @@ void Process::SendDecReqToAll(const string & msg) {
 
         }
     }
-    cout << "P" << get_pid() << ": DEC-REQ sent" << endl;
+    // cout << "P" << get_pid() << ": DEC-REQ sent" << endl;
 
 
 }

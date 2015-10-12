@@ -259,11 +259,11 @@ string Controller::get_transaction(int transaction_id) {
 // cancels all threads created by the process
 // then, cancels the thread_entry thread for that process
 void Controller::KillProcess(int process_id) {
-    // process_[process_id]->CloseFDs();
-    // process_[process_id]->CloseSDRFDs();
-    // process_[process_id]->CloseUpFDs();
-    // process_[process_id]->CloseAliveFDs();
-    // process_[process_id]->Close_server_sockfd();
+    process_[process_id]->CloseFDs();
+    process_[process_id]->CloseSDRFDs();
+    process_[process_id]->CloseUpFDs();
+    process_[process_id]->CloseAliveFDs();
+    process_[process_id]->Close_server_sockfd();
     for (const auto &th : process_[process_id]->thread_set) {
         pthread_cancel(th);
     }
@@ -432,26 +432,49 @@ int main() {
             c.InformCoordinatorOfNewTransaction(coord_id, t);
             c.InformCoordiantorOfParticipants(coord_id);
 
-            c.SetMessageCount(0,4);
-            // c.SetMessageCount(1,4);
-            // c.SetMessageCount(2,kMaxMessages);
-            // c.SetMessageCount(3,kMaxMessages);
-            // c.SetMessageCount(4,kMaxMessages);
+            
+            if(t==0)c.SetMessageCount(1,1);
+
+            // c.SetMessageCount(2,0.5);
+            // c.SetMessageCount(3,0.5);
+            // c.SetMessageCount(4,0.5);
 
             c.SetHandshakeToExpecting();
             c.WaitTillHandshakeReady();
             c.SetCoordHandshakeToInit3PC();
 
             // sleep(7);
-            // if (!c.ResurrectProcess(0)) return 1;
+            if(t==1)
+                {
+                    if (!c.ResurrectProcess(1)) return 1;   
+                }
+            // if (!c.ResurrectProcess(1)) return 1;
+            // if (!c.ResurrectProcess(3)) return 1;
+            // sleep(7);
+            // if (!c.ResurrectProcess(2)) return 1;
             // sleep(5);
-            // if (!c.ResurrectProcess(1)) return 1;
-            // if (!c.ResurrectProcess(1)) return 1;
+            // if (!c.ResurrectProcess(4)) return 1;
+
+
+            // c.SetMessageCount(0,10);
+            // // c.SetMessageCount(1,4);
+            // // c.SetMessageCount(2,kMaxMessages);
+            // // c.SetMessageCount(3,kMaxMessages);
+            // // c.SetMessageCount(4,kMaxMessages);
+
+            // c.SetHandshakeToExpecting();
+            // c.WaitTillHandshakeReady();
+            // c.SetCoordHandshakeToInit3PC();
+
+            // sleep(7);
             // if (!c.ResurrectProcess(0)) return 1;
+            // // sleep(5);
+            // // if (!c.ResurrectProcess(1)) return 1;
+            // // if (!c.ResurrectProcess(1)) return 1;
+            // // if (!c.ResurrectProcess(0)) return 1;
             
         }
         usleep(kTransactionSleep);
-        break;
         t++;
     }
 
