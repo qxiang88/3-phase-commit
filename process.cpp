@@ -27,6 +27,8 @@ pthread_mutex_t my_coord_lock;
 pthread_mutex_t my_state_lock;
 pthread_mutex_t num_messages_lock;
 pthread_mutex_t resume_lock;
+pthread_mutex_t decision_logged_lock;
+pthread_mutex_t previous_up_lock;
 
 
 void Process::ThreeWayHandshake() {
@@ -114,6 +116,8 @@ void Process::Initialize(int pid,
     thread_set.clear();
     thread_set_alive_.clear();
     up_.clear();
+    previous_up_.clear();
+
     participants_.clear();
     participant_state_map_.clear();
     rcv_alive_thread_arg.clear();
@@ -127,8 +131,30 @@ void Process::Initialize(int pid,
     newcoord_thread = 0;
     state_req_in_progress = false;
     new_coord_thread_made = false;
+    decision_logged_ = false;
     server_sockfd_ = -1;
-    num_messages_ = INT_MAX;
+    num_messages_ = kMaxMessages;
+    handshake_ = BLANK;    
+}
+
+void Process::Reset(int coord_id) {
+    set_my_coordinator(coord_id);
+
+    log_.clear();
+    up_.clear();
+    previous_up_.clear();
+
+    thread_set_alive_.clear();
+    participants_.clear();
+    participant_state_map_.clear();
+
+    transaction_id_ = -1;
+    my_state_ = UNINITIALIZED;
+    newcoord_thread = 0;
+    new_coord_thread_made = false;
+    state_req_in_progress = false;
+    decision_logged_ = false;
+    num_messages_ = kMaxMessages;
     handshake_ = BLANK;
 }
 
@@ -183,25 +209,18 @@ void Process::InitializeLocks() {
         cout << "P" << get_pid() << ": Mutex init failed" << endl;
         pthread_exit(NULL);
     }
+
+    if (pthread_mutex_init(&decision_logged_lock, NULL) != 0) {
+        cout << "P" << get_pid() << ": Mutex init failed" << endl;
+        pthread_exit(NULL);
+    }
+
+    if (pthread_mutex_init(&previous_up_lock, NULL) != 0) {
+    cout << "P" << get_pid() << ": Mutex init failed" << endl;
+    pthread_exit(NULL);
+    }
 }
 
-void Process::Reset(int coord_id) {
-    set_my_coordinator(coord_id);
-
-    log_.clear();
-    up_.clear();
-    thread_set_alive_.clear();
-    participants_.clear();
-    participant_state_map_.clear();
-
-    transaction_id_ = -1;
-    my_state_ = UNINITIALIZED;
-    newcoord_thread = 0;
-    new_coord_thread_made = false;
-    state_req_in_progress = false;
-    num_messages_ = INT_MAX;
-    handshake_ = BLANK;
-}
 // reads the playlist file
 // loads it into playlist_ unordered map
 bool Process::LoadPlaylist() {
@@ -301,13 +320,22 @@ Handshake Process::get_handshake() {
     return handshake_;
 }
 
-float Process::get_num_messages() {
-    float num;
+int Process::get_num_messages() {
+    int num;
     pthread_mutex_lock(&num_messages_lock);
     num = num_messages_;
     pthread_mutex_unlock(&num_messages_lock);
     return num;
 }
+
+bool Process::get_decision_logged() {
+    bool dec;
+    pthread_mutex_lock(&decision_logged_lock);
+    dec = decision_logged_;
+    pthread_mutex_unlock(&decision_logged_lock);
+    return dec;
+}
+
 
 //-------------------SETTERS-----------------------------------------------------
 
@@ -341,7 +369,7 @@ void Process::set_server_sockfd(int socket_fd) {
 // TODO: remember to set _fd_ to -1 on connection close
 // saves socket fd for connection from a send port
 void Process::set_fd(int process_id, int new_fd) {
-    // cout << "P" << get_pid() << ": for P" << process_id << ": old=" << get_fd(process_id);
+    // cout << "P" << get_pid() << ": for P" << process_id << ": old=" << get_fd(process_id)<<endl;
     pthread_mutex_lock(&fd_lock);
     if (fd_[process_id] == -1)
     {
@@ -402,10 +430,16 @@ void Process::set_handshake(Handshake hs) {
     handshake_ = hs;
 }
 
-void Process::set_num_messages(float num) {
+void Process::set_num_messages(int num) {
     pthread_mutex_lock(&num_messages_lock);
     num_messages_ = num;
     pthread_mutex_unlock(&num_messages_lock);
+}
+
+void Process::set_decision_logged() {
+    pthread_mutex_lock(&decision_logged_lock);
+    decision_logged_ = true;
+    pthread_mutex_unlock(&decision_logged_lock);
 }
 
 //-----------------------CLOSEFD,RESET-------------------------------------------------
@@ -574,17 +608,18 @@ void Process::DecrementNumMessages() {
 // removes itself from Controller's alive process set
 // kills itself
 void Process::Die() {
-    CloseFDs();
-    CloseSDRFDs();
-    CloseUpFDs();
-    CloseAliveFDs();
-    Close_server_sockfd();
+    set_my_status(DYING);
     for (const auto &th : thread_set) {
         pthread_cancel(th);
     }
     for (const auto &th : thread_set_alive_) {
         pthread_cancel(th);
     }
+    CloseFDs();
+    CloseSDRFDs();
+    CloseUpFDs();
+    CloseAliveFDs();
+    Close_server_sockfd();
     RemoveFromAliveProcessIds(pthread_self());
     pthread_cancel(pthread_self());
 }

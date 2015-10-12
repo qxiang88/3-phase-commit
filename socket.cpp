@@ -115,14 +115,13 @@ bool Process::ConnectToProcess(int process_id) {
             // cout << sockfd << endl;
             close(sockfd);
             // if (errno == EBADF) cout << errno << endl;
-            // cout << "P" << get_pid() << ": Client: connect ERROR\n";
             continue;
         }
 
         break;
     }
     if (l == NULL) {
-        cout << "P" << get_pid() << ": Client: connect ERROR "<<strerror(errno)<<endl;
+        // cout << "P" << get_pid() << ": Client: connect ERROR "<<strerror(errno)<<endl;
         return false;
         // exit(1);
     }
@@ -206,7 +205,6 @@ void* server(void* _p) {
         perror("sigaction");
         exit(1);
     }
-    // cout << "P" << p->get_pid() << ": Server: waiting for connections...\n";
     while (1) {
         // main accept() loop
         sin_size = sizeof their_addr;
@@ -223,7 +221,6 @@ void* server(void* _p) {
             timeval t;
             gettimeofday(&t, NULL);
             // cout << p->get_pid() << "to" << process_id<<"fd="<<p->get_fd(process_id)<<"at"<<t.tv_sec<<","<<t.tv_usec<<endl;
-            // cout << "P" << p->get_pid() << ": Server: accepting connection from P"
             // << p->get_send_port_pid_map(incoming_port) << endl;
         } else {
             process_id = p->get_alive_port_pid_map(incoming_port);

@@ -16,7 +16,7 @@
 using namespace std;
 
 extern pthread_mutex_t up_fd_lock;
-extern pthread_mutex_t up_lock;
+extern pthread_mutex_t previous_up_lock;
 
 string ConvertSetToString(set<int> a)
 {
@@ -50,7 +50,7 @@ void Process::SendUpReqToAll() {
         // cout<<"trying to send to "<<*it<<endl;
         if ((*it) == get_pid()) continue; // do not send to self
         if (send(get_up_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending up req to P" << (*it) << endl;
+            // cout << "P" << get_pid() << ": ERROR: sending up req to P" << (*it) << endl;
         }
         else {
             // cout << "P" << get_pid() << ": Up req sent to P" << (*it) << " on "<<get_up_fd(*it)<<": " << msg << endl;
@@ -104,7 +104,7 @@ bool Process::ConnectToProcessUp(int process_id) {
     freeaddrinfo(clientinfo); // all done with this structure
     if (l == NULL)  {
         fprintf(stderr, "client: failed to bind\n");
-        return false;
+        exit(1);
     }
 
     sa.sa_handler = sigchld_handler; // reap all dead processes
@@ -137,14 +137,14 @@ bool Process::ConnectToProcessUp(int process_id) {
     {
         if (connect(sockfd, l->ai_addr, l->ai_addrlen) == -1) {
             close(sockfd);
-            cout << "P" << get_pid() << ": Client1: connect ERROR\n";
+            // cout << "P" << get_pid() << ": Client1: connect ERROR"<<endl;
             continue;
         }
 
         break;
     }
     if (l == NULL) {
-        fprintf(stderr, "client: failed to connect\n");
+        // fprintf(stderr, "client: failed to connect\n");
         return false;
     }
     int outgoing_port = ntohs(return_port_no((struct sockaddr *)l->ai_addr));
@@ -271,9 +271,9 @@ void Process::ConstructUpResponse(string &msg) {
 string Process::ConvertUpSetToString()
 {
     //adds self if i have not failed
-    pthread_mutex_lock(&up_lock);
-    set<int> up_copy(up_);
-    pthread_mutex_unlock(&up_lock);
+    pthread_mutex_lock(&previous_up_lock);
+    set<int> up_copy(previous_up_);
+    pthread_mutex_unlock(&previous_up_lock);
     
 
     string rval;
@@ -297,14 +297,17 @@ string Process::ConvertUpSetToString()
 void Process::SendMyUp(int pid_other){
     string msg;
     ConstructUpResponse(msg);
+    ofstream outer("log/sendup"+to_string(get_pid()), fstream::app);
+
     if (send(get_up_fd(pid_other), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending my up to P" << pid_other << endl;
+        outer << "P" << get_pid() << ": ERROR: sending my up to P" << pid_other << endl;
         RemoveFromUpSet(pid_other);
     }
     else {
-        cout << "P" << get_pid() << ": Up set sent to P" << pid_other<<endl;
+        outer << "P" << get_pid() << ": Up set sent to P" << pid_other<<endl;
          // << ": " << msg << endl;
     }   
+    outer.close();
 }
 
 // void* ReceiveUpSet(void* _rcv_thread_arg)

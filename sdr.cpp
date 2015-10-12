@@ -96,14 +96,14 @@ bool Process::ConnectToProcessSDR(int process_id) {
     {
         if (connect(sockfd, l->ai_addr, l->ai_addrlen) == -1) {
             close(sockfd);
-            cout << "P" << get_pid() << ": Client1: connect ERROR\n";
+            // cout << "P" << get_pid() << ": Client1: connect ERROR"<<endl;
             continue;
         }
 
         break;
     }
     if (l == NULL) {
-        fprintf(stderr, "client: failed to connect\n");
+        // fprintf(stderr, "client: failed to connect\n");
         return false;
     }
     int outgoing_port = ntohs(return_port_no((struct sockaddr *)l->ai_addr));
@@ -161,7 +161,11 @@ void* ReceiveStateOrDecReq(void* _arg) {
             int recvd_tid;
             buffer_data = string(buf);
             p->ExtractMsg(buffer_data, type_req, recvd_tid);
-            outf << "P" << p->get_pid() << ": SDR recevd from P" << pid << ": " << buf <<  endl;
+
+            timeval temptime;
+            gettimeofday(&temptime, NULL);
+
+            outf << "P" << p->get_pid() << ": SDR recevd from P" << pid << ": " << buf << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
 
             int my_coord = p->get_my_coordinator();
             if (type_req == kStateReq)
@@ -187,7 +191,6 @@ void* ReceiveStateOrDecReq(void* _arg) {
                 else //i am participant
                 {
 
-                    // cout<<pid<<" "<<my_coord<<endl;
                     if (pid <= (my_coord))
                     {   //only send to valid coord
                         p->set_state_req_in_progress(true);
@@ -205,7 +208,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
             }
             else if (type_req == kURElected)
             {
-                cout << "I am elected. my coord was " << my_coord << ", my id is " << p->get_pid() << endl;
+                outf << "I am elected. my coord was " << my_coord << ", my id is " << p->get_pid() << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
                 if (my_coord == p->get_pid())
                     continue;
                 if (my_coord < pid)
@@ -223,6 +226,8 @@ void* ReceiveStateOrDecReq(void* _arg) {
 
                 pthread_mutex_unlock(&new_coord_lock);
                 if (templ) {
+                    cout<<p->get_pid()<<"creating newcoord_thread"<<endl;
+
                     p->CreateThread(p->newcoord_thread, NewCoordinatorMode, (void *)p);
                 }
 
@@ -263,8 +268,10 @@ void* responder(void *_p) {
     if (my_st == UNCERTAIN)
     {
         p->ReceivePreCommitOrAbortFromCoordinator();
-        if (p->get_my_state() == UNCERTAIN)
+        if (p->get_my_state() == UNCERTAIN) {
+            p->set_state_req_in_progress(false);
             p->Timeout();
+        }
         else if (p->get_my_state() == ABORTED)
             p->LogAbort();
         else {
@@ -281,8 +288,10 @@ void* responder(void *_p) {
             // cout << p->get_pid() << " sent ack to coord at " << time(NULL) % 100 << endl;
 
             p->ReceiveCommitFromCoordinator();
-            if (p->get_my_state() == COMMITTABLE)
+            if (p->get_my_state() == COMMITTABLE) {
+                p->set_state_req_in_progress(false);
                 p->Timeout();
+            }
             else {
                 p->LogCommit();
             }

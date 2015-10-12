@@ -94,7 +94,7 @@ int Process::WaitForVoteReq(string &transaction_msg) {
     int rv;
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
-        cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
+        // cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
         ret = INT_MAX;
         // pthread_exit(NULL);
     } else if (rv == 0) {   //timeout
@@ -155,7 +155,9 @@ void Process::SendMsgToCoordinator(const string &msg_to_send) {
     else {
         cout << "P" << get_pid() << ": Msg sent to P" << mc << ": " << msg << endl;
     }
+    // cout << "P" << get_pid() << ": num_messages=" << get_num_messages() << endl;
     DecrementNumMessages();
+    // cout << "P" << get_pid() << ": num_messages=" << endl;
 }
 
 // waits for PRE-COMMIT or ABORT from coordinator
@@ -174,7 +176,8 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
     int rv;
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
-        cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
+        // cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
+        RemoveFromUpSet(pid);
         // pthread_exit(NULL);
     } else if (rv == 0) {
         //timeout
@@ -231,7 +234,8 @@ void Process::ReceiveAnythingFromCoordinator() {
     int rv;
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
-        cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
+        // cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
+        RemoveFromUpSet(pid);
         // pthread_exit(NULL);
     } else if (rv == 0) {
         //timeout
@@ -278,6 +282,7 @@ void Process::ReceiveAnythingFromCoordinator() {
 // on timeout, initiates termination protocol
 void Process::ReceiveCommitFromCoordinator() {
     int pid = get_my_coordinator();
+    cout<<"IN function"<<endl;
     char buf[kMaxDataSize];
     int num_bytes;
     //TODO: write code to extract multiple messages
@@ -290,9 +295,11 @@ void Process::ReceiveCommitFromCoordinator() {
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
         cout << "P" << get_pid() << ": ERROR in select() for P" << pid << endl;
+        RemoveFromUpSet(pid);
         // pthread_exit(NULL);
     } else if (rv == 0) {
         //timeout
+        cout<<get_pid()<<"timed out"<<endl;
         RemoveFromUpSet(pid);
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
@@ -484,13 +491,13 @@ void Process::ParticipantMode() {
         usleep(kGeneralSleep);
     }
     if (my_state_ == ABORTED)
-        {
-            prev_decisions_.push_back(ABORT);
-        }
+    {
+        prev_decisions_.push_back(ABORT);
+    }
     else
-        {
-            prev_decisions_.push_back(COMMIT);
-        }
+    {
+        prev_decisions_.push_back(COMMIT);
+    }
 }
 
 

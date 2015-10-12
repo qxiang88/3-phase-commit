@@ -14,14 +14,62 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <limits.h>
+#include "execinfo.h"
+#include "cxxabi.h"
 using namespace std;
 
 pthread_mutex_t up_lock;
 
+
+string getname(string s) {
+    int i=0;
+    string ret;
+    while(s[i]!='(')
+    {
+        i++;
+    }
+    i++;
+    while(s[i]!='+') {
+        ret.push_back(s[i]);
+        i++;
+    }
+    return ret;
+
+}
+
+void Process::my_backtrace() {
+    int size = 20;
+    void *buffer[size];
+    ofstream backout("log/backout/"+to_string(get_pid()), fstream::app);
+    if(!backout.is_open())cout<<"error opening file"<<endl;
+
+    int ret = backtrace(buffer, size);
+    char **ptr = backtrace_symbols( buffer, ret );
+
+    int status = -1;
+    for (int i = 0; i < ret; ++i)
+    {
+        char *demangledName = abi::__cxa_demangle( getname(string(ptr[i])).c_str(), NULL, NULL, &status );
+        if ( status == 0 )
+        {
+            backout << demangledName << std::endl;
+        }
+        free( demangledName );
+    }
+    
+    backout.close();
+
+    free(ptr);
+}
+
 void Process::RemoveFromUpSet(int k) {
 
-    if (get_my_status() == RECOVERY)
+    if (get_my_status() == RECOVERY || get_my_status() == DYING)
         return;
+    ofstream backout("log/backout/"+to_string(get_pid()), fstream::app);
+    if(!backout.is_open())cout<<"error opening file"<<endl;
+    backout<<"I am P"<<get_pid()<<". Removing"<< k<<endl;
+    my_backtrace();
 
     bool log = false;
     pthread_mutex_lock(&up_lock);
@@ -38,13 +86,14 @@ void Process::RemoveFromUpSet(int k) {
         LogUp();
 
     if (k != INT_MAX) {
-        cout << "~~~~" << endl;
+        // cout << "~~~~" << endl;
         reset_fd(k);
         reset_alive_fd(k);
         reset_sdr_fd(k);
         reset_up_fd(k);
 
     }
+    backout.close();
 }
 
 // function to initiate a connect() request to process _pid
@@ -97,7 +146,7 @@ bool Process::ConnectToProcessAlive(int process_id) {
     freeaddrinfo(clientinfo); // all done with this structure
     if (l == NULL)  {
         fprintf(stderr, "client: failed to bind\n");
-        return false;
+        exit(1);
     }
 
     sa.sa_handler = sigchld_handler; // reap all dead processes
@@ -137,9 +186,9 @@ bool Process::ConnectToProcessAlive(int process_id) {
         break;
     }
     if (l == NULL) {
-        cout << "P" << get_pid() << ": AClient: connect ERROR\n";
+        // cout << "P" << get_pid() << ": AClient: connect ERROR\n";
         // fprintf(stderr, "client: failed to connect\n");
-        exit(1);
+        return false;
     }
     int outgoing_port = ntohs(return_port_no((struct sockaddr *)l->ai_addr));
     // cout << "P" << get_pid() << ": Client: connecting to " << outgoing_port << endl ;
@@ -237,7 +286,7 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
         }
 
         start_time = (start_time + kReceiveAliveTimeoutTimeval.tv_sec) % 100;
-        sleep((beforetime.tv_sec + 2) - aftertime.tv_sec);
+        sleep((beforetime.tv_sec + kReceiveAliveTimeoutTimeval.tv_sec) - aftertime.tv_sec);
     }
 }
 
@@ -260,7 +309,7 @@ void* SendAlive(void *_p) {
 
         auto it = up_copy.begin();
         while (it != up_copy.end()) {
-
+            if(*it==p->get_pid()) continue;
             if (send(p->get_alive_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
                 // if (errno == ECONNRESET) {  // connection reset by peer
                 //     // cout << "P" << p->get_pid() << ": ALIVE connection reset by P" << (*it) << ". Removing it from UP set" << endl;

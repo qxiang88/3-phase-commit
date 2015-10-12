@@ -32,6 +32,8 @@ extern pthread_mutex_t my_coord_lock;
 extern pthread_mutex_t my_state_lock;
 extern pthread_mutex_t num_messages_lock;
 extern pthread_mutex_t resume_lock;
+extern pthread_mutex_t previous_up_lock;
+
 //sets my_state_ accd to log and calls termination protocol
 void Process::Recovery()
 {
@@ -46,7 +48,7 @@ void Process::Recovery()
     LoadUp();
     cout << "Transaction id: " << transaction_id_ << endl;
     cout << "Up set: ";
-    for (auto const &p : up_) {
+    for (auto const &p : previous_up_) {
         cout << p << " ";
     }
     cout << endl;
@@ -185,6 +187,7 @@ void Process::TerminationProtocol()
 
         pthread_mutex_unlock(&new_coord_lock);
         if (templ) {
+            cout<<get_pid()<<"creating newcoord_thread"<<endl;
             CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
             pthread_join(newcoord_thread, &status);
             RemoveThreadFromSet(newcoord_thread);
@@ -193,9 +196,9 @@ void Process::TerminationProtocol()
     }
     else
     {
-        pthread_mutex_lock(&state_req_lock);
-        state_req_in_progress = false;
-        pthread_mutex_unlock(&state_req_lock);
+        // pthread_mutex_lock(&state_req_lock);
+        // state_req_in_progress = false;
+        // pthread_mutex_unlock(&state_req_lock);
 
         SendURElected(get_my_coordinator());
         usleep(kGeneralTimeout);
@@ -236,9 +239,9 @@ int Process::GetNewCoordinator()
 {
     // ofstream ofile("log/selectnewcoord"+to_string(get_pid())+","+to_string(time(NULL)%100));
     int min;
-    pthread_mutex_lock(&up_lock);
-    set<int> copy_up(up_);
-    pthread_mutex_unlock(&up_lock);
+    pthread_mutex_lock(&previous_up_lock);
+    set<int> copy_up(previous_up_);
+    pthread_mutex_unlock(&previous_up_lock);
 
     for ( auto it = copy_up.cbegin(); it != copy_up.cend(); ++it )
     {
@@ -331,14 +334,14 @@ void* ReceiveDecision(void* _rcv_thread_arg)
     int rv;
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
-        cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << endl;
-        rcv_thread_arg->received_msg_type = ERROR;
+        // cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << endl;
+        rcv_thread_arg->received_msg_type = TIMEOUT;
     } else if (rv == 0) {   //timeout
         rcv_thread_arg->received_msg_type = TIMEOUT;
     } else {    // activity happened on the socket
         if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
-            rcv_thread_arg->received_msg_type = ERROR;
+            rcv_thread_arg->received_msg_type = TIMEOUT;
         } else if (num_bytes == 0) {     //connection closed
             cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
             // if participant closes connection, it is equivalent to it crashing
@@ -418,13 +421,19 @@ void Process::DecisionRequest()
     return;
 }
 
-bool Process::CheckForTotalFailure(set<int> &intersection_up, vector<bool> &crashed, bool &operational_process_exists)
+bool Process::CheckForTotalFailure(set<int> &alive_processes_now, set<int> &intersection_up, vector<bool> &crashed, bool &operational_process_exists)
 {
     // set<int> intersection_up(up_);
     // set<int> alive_processes_now;
     // cout<<"alive_processes_now: ";
-    set<int> alive_processes_now;
+    ofstream outer("log/computeup"+to_string(get_pid()), fstream::app);
 
+    alive_processes_now.clear();
+    outer<<"intilized intersection: ";
+    for(auto it = intersection_up.begin(); it!=intersection_up.end(); it++)
+        outer<<*it<<" ";
+    outer<<endl;
+    outer<<"Processes that sent me up: ";
     //what happens if someone doesnt send up set now
     for(auto iter = all_up_sets_.begin(); iter!=all_up_sets_.end(); iter++)
     {
@@ -433,42 +442,61 @@ bool Process::CheckForTotalFailure(set<int> &intersection_up, vector<bool> &cras
             {
                 crashed[iter->first] = false;
                 operational_process_exists = true;
-                cout<<"Operational process exists "<<iter->first<<endl;
+                outer<<"Operational process exists "<<iter->first<<endl;
+                outer.close();
+
                 return false;
             }
         else
             crashed[iter->first] = true;
 
+        set<int> temp;
         set_intersection(intersection_up.begin(),intersection_up.end(),iter->second.begin(),iter->second.end(),
-                  inserter(intersection_up,intersection_up.begin()));
-        cout<<iter->first<<" ";
+                  inserter(temp,temp.begin()));
+        intersection_up = temp;
+        outer<<iter->first<<",";
     }
-    cout<<endl;
-    cout<<"intersection: ";
+    outer<<endl;
+    outer<<"intersection: ";
     for(auto it = intersection_up.begin(); it!=intersection_up.end(); it++)
-        cout<<*it<<" ";
-    cout<<endl;
+        outer<<*it<<" ";
+    outer<<endl;
 
     //to check if up is subset of alive
     //up - alive should be empty
     set<int> result;
     set_difference(intersection_up.begin(), intersection_up.end(),alive_processes_now.begin(), alive_processes_now.end(), 
         inserter(result, result.end()));    
-    intersection_up = result;
-    if (!intersection_up.empty()){
-         
+    
+    outer<<"result: ";
+    for(auto it = result.begin(); it!=result.end(); it++)
+        outer<<*it<<" ";
+    outer<<endl;
+
+
+    if (result.empty())
+    { 
+        outer<<"Empty"<<endl;
         if (intersection_up.find(get_pid())!=intersection_up.end())
         {
+            outer<<"I am in intersection_up"<<endl;
             //if i am in intersection
             //total failure
+            outer.close();
+
             return true;
             // TerminationProtocol();
 
         }
 
     }
-
-    return false;
+    else
+    {
+        outer<<"Cant decide now"<<endl;
+        outer.close();
+        //last p to fail hasnt come
+        return false;
+    }
         // if i am in intersection:
         //     if any other not failed in intersection:
         //         skip
@@ -482,26 +510,32 @@ bool Process::CheckForTotalFailure(set<int> &intersection_up, vector<bool> &cras
 void Process::TotalFailure()
 {
     ProcessState local_my_state;
-
-    set<int> intersection_up(up_);
+    ofstream outer("log/totalfail"+to_string(get_pid()), fstream::app);
+    set<int> intersection_up(previous_up_);
     vector<bool> crashed(participants_.size(), true);
     bool operational_process_exists = false;
+    set<int> alive_processes_now;
 
     while (true)
     {
-        cout<<"Starting total failure check"<<endl;
+        outer<<"Starting total failure check"<<endl;
         SendUpReqToAll();
+        all_up_sets_[get_pid()] = previous_up_;
         usleep(kGeneralTimeout);
         
         operational_process_exists = false;
-        cout<<"abt to enter checking "<<endl;
-        bool is_total_failure = CheckForTotalFailure(intersection_up, crashed, operational_process_exists);
+        outer<<"abt to enter checking "<<endl;
+        bool is_total_failure = CheckForTotalFailure(alive_processes_now,intersection_up, crashed, operational_process_exists);
         if(operational_process_exists)
             continue;
         if(!is_total_failure)
-            cout<<"Can't determine total failure"<<endl;
+            outer<<"Can't determine total failure"<<endl;
         else
-            TerminationProtocol();
+            {
+                up_ =  alive_processes_now;
+                // up_.erase(get_pid());
+                TerminationProtocol();
+            }
 
         local_my_state = get_my_state();
         
@@ -515,4 +549,5 @@ void Process::TotalFailure()
         }
         // usleep(kUpReqTimeout);
     }
+    outer.close();
 }

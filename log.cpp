@@ -83,13 +83,13 @@ bool Process::LoadLogAndPrevDecisions()
                 string id = line.substr(5);
                 round_id = atoi(id.c_str());
 
-                if(!round_assigned && !last_uninserted_up.empty()){
-                log_[round_id].push_back(last_uninserted_up);                    
+                if (!round_assigned && !last_uninserted_up.empty()) {
+                    log_[round_id].push_back(last_uninserted_up);
                 }
 
                 round_assigned = true;;
             }
-            else if(round_assigned)
+            else if (round_assigned)
             {
                 log_[round_id].push_back(line);
 
@@ -98,7 +98,7 @@ bool Process::LoadLogAndPrevDecisions()
                 else if (line == "abort")
                     prev_decisions_.push_back(ABORT);
             }
-            else{
+            else {
                 last_uninserted_up = line;
             }
 
@@ -132,7 +132,7 @@ void Process::LoadTransactionId()
 //             found = log_[transaction_id_][*it].find("start");
 //             if (found != string::npos)
 //                 return true;
-    
+
 //         }
 //     return false;
 // }
@@ -141,7 +141,7 @@ void Process::LoadUp()
 {
     vector<string> cur_trans_log = log_[transaction_id_];
     vector<string> temp;
-    up_.clear();
+    previous_up_.clear();
     for (vector<string>::reverse_iterator it = cur_trans_log.rbegin(); it != cur_trans_log.rend(); ++it)
     {
         temp = split(*it, ' ');
@@ -149,11 +149,11 @@ void Process::LoadUp()
         {
             temp = split(temp[1], ',');
             for (auto it = temp.begin(); it != temp.end(); it++)
-                up_.insert(atoi((*it).c_str()));
+                previous_up_.insert(atoi((*it).c_str()));
             break;
         }
     }
-    up_.insert(get_pid());
+    previous_up_.insert(get_pid());
     return;
 }
 
@@ -196,7 +196,7 @@ void Process::LoadParticipants()
     {
         entry = *i;
         tokens = split(entry, ' ');
-        if(tokens[0]!="up:")
+        if (tokens[0] != "up:")
             break;
     }
     // vector<string> tokens = split(entry, ' ');
@@ -239,7 +239,10 @@ void Process::LoadParticipants()
 //initial ones just to maintain uniformity. can be removed if want to handle string while calling
 void Process::LogCommit()
 {
-    AddToLog("commit");
+    if (!get_decision_logged()) {
+        AddToLog("commit");
+        set_decision_logged();
+    }
 }
 
 void Process::LogPreCommit()
@@ -248,7 +251,10 @@ void Process::LogPreCommit()
 }
 void Process::LogAbort()
 {
-    AddToLog("abort");
+    if (!get_decision_logged()) {
+        AddToLog("abort");
+        set_decision_logged();
+    }
 }
 
 void Process::LogYes()
@@ -318,15 +324,14 @@ void Process::LogUp()
 
 void Process::LogCommitOrAbort()
 {
-    cout << "Decided. My state is ";
     if (get_my_state() == ABORTED)
     {
         LogAbort();
-        cout << "Aborted" << endl;
+        cout << "Decided. My state is Aborted" << endl;
     }
     else if (get_my_state() == COMMITTED)
     {
-        cout << "Commited" << endl;
+        cout << "Decided. My state is Commited" << endl;
         LogCommit();
     }
 }

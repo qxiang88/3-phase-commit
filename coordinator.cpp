@@ -61,7 +61,7 @@ void Process::SendStateReqToAll(const string &msg) {
         // if ((it->first) == get_pid()) continue; // do not send to self
         ContinueOrDie();
         if (send(get_sdr_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending state req to P" << (it->first) << endl;
+            // cout << "P" << get_pid() << ": ERROR: sending state req to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
         }
         else {
@@ -98,8 +98,7 @@ void Process::WaitForVotes() {
         pthread_join(receive_thread[i], &status);
         RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->received_msg_type) == ERROR) {
-            //TODO: not necessarily. handle
-            // pthread_exit(NULL);
+            cout<<"!!!!!!!!!!"<<endl;
         } else if ((rcv_thread_arg[i]->received_msg_type) == YES) {
             // if a participant votes yes, mark its state as UNCERTAIN
             it->second = UNCERTAIN;
@@ -140,8 +139,7 @@ void Process::WaitForAck() {
         pthread_join(receive_thread[i], &status);
         RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->received_msg_type) == ERROR) {
-            //TODO: not necessarily. handle
-            // pthread_exit(NULL);
+            cout<<"!!!!!!!!!!"<<endl;
         } else if ((rcv_thread_arg[i]->received_msg_type) == ACK) {
             // if a participant ACKed, good for you
             // no need to do anything
@@ -198,7 +196,7 @@ void Process::SendPreCommitToAll() {
         // if ((it->first) == get_pid()) continue; // do not send to self
         ContinueOrDie();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending pc to all P" << (it->first) << endl;
+            // cout << "P" << get_pid() << ": ERROR: sending pc to all P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
         }
         else {
@@ -231,7 +229,7 @@ void Process::SendCommitToAll() {
         // if ((it->first) == get_pid()) continue; // do not send to self
         ContinueOrDie();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending c to all: to P" << (it->first) << endl;
+            // cout << "P" << get_pid() << ": ERROR: sending c to all: to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
         }
         else {
@@ -262,15 +260,16 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
     int rv;
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
-        cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << endl;
-        rcv_thread_arg->received_msg_type = ERROR;
+        // cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << strerror(errno)<<endl;
+        rcv_thread_arg->received_msg_type = TIMEOUT;
+        p->RemoveFromUpSet(pid);
     } else if (rv == 0) {   //timeout
         rcv_thread_arg->received_msg_type = TIMEOUT;
         p->RemoveFromUpSet(pid);
     } else {    // activity happened on the socket
         if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
-            rcv_thread_arg->received_msg_type = ERROR;
+            rcv_thread_arg->received_msg_type = TIMEOUT;
             p->RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
             cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
@@ -325,15 +324,16 @@ void* ReceiveAckFromParticipant(void* _rcv_thread_arg) {
     int rv;
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
-        cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << endl;
-        rcv_thread_arg->received_msg_type = ERROR;
+        // cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << strerror(errno)<< endl;
+        rcv_thread_arg->received_msg_type = TIMEOUT;
+        p->RemoveFromUpSet(pid);
     } else if (rv == 0) {   //timeout
         rcv_thread_arg->received_msg_type = TIMEOUT;
         p->RemoveFromUpSet(pid);
     } else {    // activity happened on the socket
         if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
             cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
-            rcv_thread_arg->received_msg_type = ERROR;
+            rcv_thread_arg->received_msg_type = TIMEOUT;
             p->RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
             cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
@@ -382,7 +382,9 @@ void* ReceiveStateFromParticipant(void* _rcv_thread_arg) {
     int rv;
     rv = select(fd_max + 1, &temp_set, NULL, NULL, (timeval*)&kTimeout);
     if (rv == -1) { //error in select
-        cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << endl;
+        // cout << "P" << p->get_pid() << ": ERROR in select() for P" << pid << strerror(errno)<< endl;
+        rcv_thread_arg->st = PROCESSTIMEOUT;
+        p->RemoveFromUpSet(pid);
     } else if (rv == 0) {   //timeout
         rcv_thread_arg->st = PROCESSTIMEOUT;
         p->RemoveFromUpSet(pid);
@@ -534,8 +536,6 @@ void Process::CoordinatorMode() {
         LogPreCommit();
         SendPreCommitToAll();
         WaitForAck();
-        return;
-        
         // return;
         LogCommit();
         my_state_ = COMMITTED;
@@ -561,8 +561,8 @@ void* NewCoordinatorMode(void * _p) {
         if (*it == p->get_pid()) continue;
         if (p->ConnectToProcess(*it))
             p->participant_state_map_.insert(make_pair(*it, UNINITIALIZED));
-        else
-            cout << "P" << p->get_pid() << ": Unable to connect to P" << *it << endl;
+        // else
+            // cout << "P" << p->get_pid() << ": Unable to connect to P" << *it << endl;
     }
     // return NULL;
     string msg;

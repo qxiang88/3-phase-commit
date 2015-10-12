@@ -45,12 +45,14 @@ void Process::SendState(int recp)
         return;
     }
     ContinueOrDie();
+    timeval temptime;
+    gettimeofday(&temptime, NULL);
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending state to P" << recp << endl;
+        cout << "P" << get_pid() << ": ERROR: sending state to P" << recp << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
         RemoveFromUpSet(recp);
     }
     else {
-        cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
+        cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
     }
     DecrementNumMessages();
 }
@@ -67,14 +69,14 @@ void Process::SendDecision(int recp)
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     // cout << get_fd(recp) << " " << recp << endl;
     ContinueOrDie();
+    timeval aftertime;
+    gettimeofday(&aftertime, NULL);
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        timeval aftertime;
-        gettimeofday(&aftertime, NULL);
         cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
         RemoveFromUpSet(recp);
     }
     else {
-        cout << "P" << get_pid() << ": decision Msg sent to P" << recp << ": " << msg << endl;
+        cout << "P" << get_pid() << ": decision Msg sent to P" << recp << ": " << msg << "at " << aftertime.tv_sec << ", " << aftertime.tv_usec << endl;
     }
     DecrementNumMessages();
 }
@@ -105,13 +107,15 @@ bool Process::SendURElected(int recp)
     bool ret;
 
     ContinueOrDie();
+    timeval temptime;
+    gettimeofday(&temptime, NULL);
     if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
         cout << "P" << get_pid() << ": ERROR: sending urelected to P" << recp << endl;
         RemoveFromUpSet(recp);
         ret = false;
     }
     else {
-        cout << "P" << get_pid() << ": URElected Msg sent to P" << recp << ": " << msg << endl;
+        cout << "P" << get_pid() << ": URElected Msg sent to P" << recp << ": " << msg << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
         ret = true;
     }
     DecrementNumMessages();

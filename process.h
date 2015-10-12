@@ -3,6 +3,7 @@
 
 #include "controller.h"
 #include "string"
+#include "fstream"
 #include "unordered_map"
 #include "unordered_set"
 #include "vector"
@@ -59,8 +60,7 @@ typedef enum
 // status of each process. Used by controller to move to next transaction
 typedef enum
 {
-    // first time process runs
-    // INITIALIZE,
+    DYING,
 
     // process is still involved in a transaction related message-passing (but never failed)
     RUNNING,
@@ -162,7 +162,7 @@ public:
     void WaitForStates();
     void SendDecision(int);
     void SendPrevDecision(int, int);
-    bool CheckForTotalFailure(set<int> &intersection_up, vector<bool> &crashed, bool &operational_process_exists);
+    bool CheckForTotalFailure(set<int> &alive_processes_now, set<int> &intersection_up, vector<bool> &crashed, bool &operational_process_exists);
     void TotalFailure();
     void AddToLog(string s, bool new_round = false);
     int GetCoordinator();
@@ -208,13 +208,16 @@ public:
     void set_my_status(ProcessRunningStatus status);
     void set_server_sockfd(int socket_fd);
     int get_server_sockfd();
-    float get_num_messages();
-    void set_num_messages(float num);
+    int get_num_messages();
+    void set_num_messages(int num);
+    bool get_decision_logged();
+    void set_decision_logged();
     void Close_server_sockfd();
     void reset_fd(int process_id);
     void reset_alive_fd(int process_id);
     void reset_up_fd(int process_id);
     void reset_sdr_fd(int process_id);
+    void my_backtrace();
 
 
     // list of processes operational for a transaction (and hence, an iteration of 3PC)
@@ -223,7 +226,7 @@ public:
     // does not include self
     set<int> up_;
     map< int, set<int> > all_up_sets_;
-
+    set<int> previous_up_;
     // list of processes involved in a transaction (and hence, an iteration of 3PC)
     unordered_set<int> participants_;
     std::unordered_map<int, ProcessState> participant_state_map_;
@@ -237,6 +240,7 @@ public:
 
     vector<ReceiveAliveThreadArgument*> rcv_alive_thread_arg;
 
+    // ofstream backout;
 
 private:
     int pid_;
@@ -281,7 +285,8 @@ private:
     // float value because a value like 2.5 can be used to encode case
     // where process sends 2 messages and waits for receive
     // as oppposed to value=2, where process dies immediately after sending msg2
-    float num_messages_;
+    int num_messages_;
+    bool decision_logged_;
 
 };
 

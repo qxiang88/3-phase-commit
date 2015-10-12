@@ -214,7 +214,7 @@ bool Controller::ResurrectProcess(int process_id) {
     process_[process_id].Initialize(process_id,
                                     kLogFile + to_string(process_id),
                                     kPlaylistFile + to_string(process_id),
-                                    -1,
+                                    INT_MAX,
                                     RECOVERY);
     if (pthread_create(&process_thread_[process_id], NULL, ThreadEntry, (void *)&process_[process_id])) {
         cout << "C: ERROR: Unable to create thread for P" << process_id << endl;
@@ -424,20 +424,22 @@ int main() {
             c.InformCoordinatorOfNewTransaction(coord_id, t);
             c.InformCoordiantorOfParticipants(coord_id);
 
-            c.SetMessageCount(0,4);
-            c.SetMessageCount(1,10);
-            c.SetMessageCount(2,10);
+            c.SetMessageCount(0,8);
+            c.SetMessageCount(1,1);
+            c.SetMessageCount(2,1);
             c.SetMessageCount(3,1);
             c.SetMessageCount(4,1);
 
             c.SetHandshakeToExpecting();
             c.WaitTillHandshakeReady();
             c.SetCoordHandshakeToInit3PC();
-
+            
             sleep(7);
-            if (!c.ResurrectProcess(3)) return 1;
-            if (!c.ResurrectProcess(4)) return 1;
             if (!c.ResurrectProcess(0)) return 1;
+            if (!c.ResurrectProcess(1)) return 1;
+            if (!c.ResurrectProcess(2)) return 1;
+
+            // if (!c.ResurrectProcess(0)) return 1;
             
         }
         usleep(kTransactionSleep);
