@@ -27,7 +27,7 @@ bool Process::ExtractFromVoteReq(const string &msg, string &transaction_msg ) {
         ret = true;
     } else  { // it's something else
         //TODO: take actions appropriately, like check log for previous transaction decision.
-        cout << "P" << get_pid() << ": Unexpected msg received from P" << get_my_coordinator() << endl;
+        cout << "P" << get_pid() << ": Unexpected votereq msg received from P" << get_my_coordinator() << extracted_msg<<endl;
         ret = false;
     }
 
@@ -105,12 +105,12 @@ int Process::WaitForVoteReq(string &transaction_msg) {
         // cout << "P" << get_pid() << ": fd for" << pid << "=" << get_fd(pid) << endl;
 
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
-            cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
+            // cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
             RemoveFromUpSet(pid);
             ret = INT_MAX;
             // pthread_exit(NULL); //TODO: think about whether it should be exit or not
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
+            // cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
             // if coordinator closes connection, it is equivalent to coordinator crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
@@ -119,7 +119,7 @@ int Process::WaitForVoteReq(string &transaction_msg) {
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << get_pid() << ": Msg received from P" << pid << ": " << buf <<  endl;
+            cout << "P" << get_pid() << ": VOTE-REQ received from P" << pid << endl;
 
             // in this case, we don't care about the received_tid,
             // because it will surely be for the transaction under consideration
@@ -134,11 +134,9 @@ int Process::WaitForVoteReq(string &transaction_msg) {
 }
 
 // send <msg_to_send> to coordinator
-void Process::SendMsgToCoordinator(const string &msg_to_send) {
+void Process::SendMsgToCoordinator(const string &msg_to_send, int mc) {
     string msg;
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
-    int mc = get_my_coordinator();
-
     if (mc == INT_MAX) {
         ContinueOrDie();
         DecrementNumMessages();
@@ -147,7 +145,7 @@ void Process::SendMsgToCoordinator(const string &msg_to_send) {
 
     ContinueOrDie();
     if (send(get_fd(mc), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending msg to coord to P" << mc << endl;
+        // cout << "P" << get_pid() << ": ERROR: sending msg to coord to P" << mc << endl;
         RemoveFromUpSet(my_coordinator_);
     }
     else {
@@ -161,8 +159,7 @@ void Process::SendMsgToCoordinator(const string &msg_to_send) {
 // waits for PRE-COMMIT or ABORT from coordinator
 // on receipt, updates my_state_ variable
 // on timeout, initiates termination protocol
-void Process::ReceivePreCommitOrAbortFromCoordinator() {
-    int pid = get_my_coordinator();
+void Process::ReceivePreCommitOrAbortFromCoordinator(int pid) {
     char buf[kMaxDataSize];
     int num_bytes;
     //TODO: write code to extract multiple messages
@@ -183,10 +180,10 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
         //do i need to set somethign here
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
-            cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
+            // cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
             RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
+            // cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
             // if coordinator closes connection, it is equivalent to coordinator crashing
             // can treat it as TIMEOUT
             RemoveFromUpSet(pid);
@@ -209,7 +206,7 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
                 set_my_state(ABORTED);
             } else {
                 //TODO: take actions appropriately, like check log for previous transaction decision.
-                cout << "P" << get_pid() << ": Unexpected msg received from P" << pid << endl;
+                cout << "P" << get_pid() << ": Unexpected msg received from P" << pid << extracted_msg<<endl;
             }
         }
     }
@@ -219,8 +216,7 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
 // waits for PRE-COMMIT or ABORT or COMMIT from coordinator
 // on receipt, updates my_state_ variable
 // on timeout, initiates termination protocol
-void Process::ReceiveAnythingFromCoordinator() {
-    int pid = get_my_coordinator();
+void Process::ReceiveAnythingFromCoordinator(int pid) {
     char buf[kMaxDataSize];
     int num_bytes;
     //TODO: write code to extract multiple messages
@@ -241,10 +237,10 @@ void Process::ReceiveAnythingFromCoordinator() {
         //do i need to set somethign here
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
-            cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
+            // cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
             RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
+            // cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
             // if coordinator closes connection, it is equivalent to coordinator crashing
             // can treat it as TIMEOUT
             RemoveFromUpSet(pid);
@@ -269,7 +265,7 @@ void Process::ReceiveAnythingFromCoordinator() {
                 set_my_state(COMMITTED);
             } else {
                 //TODO: take actions appropriately, like check log for previous transaction decision.
-                cout << "P" << get_pid() << ": Unexpected msg received from P" << pid << endl;
+                cout << "P" << get_pid() << ": Unexpected msg received from P" << pid << extracted_msg<<endl;
             }
         }
     }
@@ -278,8 +274,7 @@ void Process::ReceiveAnythingFromCoordinator() {
 
 // Waits for COMMIT from coordinator
 // on timeout, initiates termination protocol
-void Process::ReceiveCommitFromCoordinator() {
-    int pid = get_my_coordinator();
+void Process::ReceiveCommitFromCoordinator(int pid) {
     char buf[kMaxDataSize];
     int num_bytes;
     //TODO: write code to extract multiple messages
@@ -300,10 +295,10 @@ void Process::ReceiveCommitFromCoordinator() {
         RemoveFromUpSet(pid);
     } else {    // activity happened on the socket
         if ((num_bytes = recv(get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
-            cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
+            // cout << "P" << get_pid() << ": ERROR in receiving for P" << pid << endl;
             RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
+            // cout << "P" << get_pid() << ": Connection closed by P" << pid << endl;
             RemoveFromUpSet(pid);
             // if coordinator closes connection, it is equivalent to coordinator crashing
             // can treat it as TIMEOUT
@@ -312,7 +307,7 @@ void Process::ReceiveCommitFromCoordinator() {
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << get_pid() << ": Msg received from P" << pid << ": " << buf <<  "at " << time(NULL) % 100 << endl;
+            cout << "P" << get_pid() << ": COMMIT received from P" << pid << endl;
 
             string extracted_msg;
             int received_tid;
@@ -324,7 +319,7 @@ void Process::ReceiveCommitFromCoordinator() {
                 set_my_state(COMMITTED);
             } else {
                 //TODO: take actions appropriately, like check log for previous transaction decision.
-                cout << "P" << get_pid() << ": Unexpected msg received from P" << pid << endl;
+                cout << "P" << get_pid() << ": Unexpected msg received from P" << pid << extracted_msg<<endl;
             }
         }
     }
@@ -424,21 +419,25 @@ void Process::ParticipantMode() {
 
     if (get_my_state() ==  ABORTED)
     {   //participant's vote was NO
-        SendMsgToCoordinator(kNo);
+        SendMsgToCoordinator(kNo, c_id);
         LogAbort();
     }
     else
     {   //participant's vote was YES
+        
+
+
+
         LogYes();
-        SendMsgToCoordinator(kYes);
-        ReceivePreCommitOrAbortFromCoordinator();
+        SendMsgToCoordinator(kYes, c_id);
+        ReceivePreCommitOrAbortFromCoordinator(c_id);
 
         if (get_my_state() == COMMITTABLE)
         {   // coord sent PRE-COMMIT
             LogPreCommit();
-            SendMsgToCoordinator(kAck);
+            SendMsgToCoordinator(kAck, c_id);
             // cout<<pid_<<" sent ack to coord at "<<time(NULL)%100<<endl;
-            ReceiveCommitFromCoordinator();
+            ReceiveCommitFromCoordinator(c_id);
             //this detects timeout, exits and state will be the same as intial
             if (get_my_state() == COMMITTED)
             {
@@ -446,7 +445,7 @@ void Process::ParticipantMode() {
             }
             else
             {
-                RemoveFromUpSet(get_my_coordinator());
+                RemoveFromUpSet(c_id);
                 Timeout();
 
             }
@@ -459,7 +458,7 @@ void Process::ParticipantMode() {
 
         else
         {
-            RemoveFromUpSet(get_my_coordinator());
+            RemoveFromUpSet(c_id);
             Timeout();
             // Print();
 
@@ -473,6 +472,9 @@ void Process::ParticipantMode() {
     //                                     else becomes new coord) or
     //          b) till new coord sends me dec
     //      i can just wait till b if recv dec is handled by someone
+    timeval timeofday;
+    gettimeofday(&timeofday, NULL);
+    // cout << "P" << get_pid() << ": About to enter quasi busywait"<<" at "<<timeofday.tv_sec<<"."<<timeofday.tv_usec<<endl;
 
 
 //TODO: when participant recovers, make sure that it ignores STATE-REQ from new coord

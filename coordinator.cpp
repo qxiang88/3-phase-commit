@@ -44,11 +44,11 @@ void Process::SendVoteReqToAll(const string &msg) {
 
         ContinueOrDie();
         if (send(get_fd(it->first), msg.c_str(), msg.size(), 0) == -1) {
-            cout << "P" << get_pid() << ": ERROR: sending votereq to P" << (it->first) << endl;
+            // cout << "P" << get_pid() << ": ERROR: sending votereq to P" << (it->first) << endl;
             RemoveFromUpSet(it->first);
         }
         else {
-            cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
+            cout << "P" << get_pid() << ": VOTE-REQ sent to P" << (it->first) << endl;
         }
         DecrementNumMessages();
     }
@@ -65,7 +65,7 @@ void Process::SendStateReqToAll(const string &msg) {
             RemoveFromUpSet(it->first);
         }
         else {
-            cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
+            cout << "P" << get_pid() << ": STATE-REQ sent to P" << (it->first) << endl;
         }
         DecrementNumMessages();
     }
@@ -98,7 +98,7 @@ void Process::WaitForVotes() {
         pthread_join(receive_thread[i], &status);
         RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->received_msg_type) == ERROR) {
-            cout<<"!!!!!!!!!!"<<endl;
+
         } else if ((rcv_thread_arg[i]->received_msg_type) == YES) {
             // if a participant votes yes, mark its state as UNCERTAIN
             it->second = UNCERTAIN;
@@ -139,7 +139,7 @@ void Process::WaitForAck() {
         pthread_join(receive_thread[i], &status);
         RemoveThreadFromSet(receive_thread[i]);
         if ((rcv_thread_arg[i]->received_msg_type) == ERROR) {
-            cout<<"!!!!!!!!!!"<<endl;
+
         } else if ((rcv_thread_arg[i]->received_msg_type) == ACK) {
             // if a participant ACKed, good for you
             // no need to do anything
@@ -200,7 +200,7 @@ void Process::SendPreCommitToAll() {
             RemoveFromUpSet(it->first);
         }
         else {
-            cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
+            cout << "P" << get_pid() << ": PRE-COMMIT sent to P" << (it->first) << endl;
         }
         DecrementNumMessages();
     }
@@ -211,11 +211,11 @@ void Process::SendPreCommitToProcess(int process_id) {
     ConstructGeneralMsg(kPreCommit, transaction_id_, msg);
     ContinueOrDie();
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending pc to P" << process_id << endl;
+        // cout << "P" << get_pid() << ": ERROR: sending pc to P" << process_id << endl;
         RemoveFromUpSet(process_id);
     }
     else {
-        cout << "P" << get_pid() << ": Msg sent to P" << process_id << ": " << msg << endl;
+        cout << "P" << get_pid() << ": PRE=COMMIT sent to P" << process_id << endl;
     }
     DecrementNumMessages();
 }
@@ -233,7 +233,7 @@ void Process::SendCommitToAll() {
             RemoveFromUpSet(it->first);
         }
         else {
-            cout << "P" << get_pid() << ": Msg sent to P" << (it->first) << ": " << msg << endl;
+            cout << "P" << get_pid() << ": COMMIT sent to P" << (it->first) << endl;
         }
         DecrementNumMessages();
     }
@@ -268,11 +268,11 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
         p->RemoveFromUpSet(pid);
     } else {    // activity happened on the socket
         if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
-            cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
             rcv_thread_arg->received_msg_type = TIMEOUT;
             p->RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
             // if participant closes connection, it is equivalent to it crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
@@ -281,7 +281,7 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << p->get_pid() << ": Msg received from P" << pid << ": " << buf <<  endl;
+            cout << "P" << p->get_pid() << ": VOTE-REQ received from P" << pid <<  endl;
 
             string extracted_msg;
             int received_tid;
@@ -295,7 +295,9 @@ void* ReceiveVoteFromParticipant(void* _rcv_thread_arg) {
                 rcv_thread_arg->received_msg_type = NO;
             } else {
                 //TODO: take actions appropriately, like check log for previous transaction decision.
-                cout << "P" << p->get_pid() << ": Unexpected msg received from P" << pid << endl;
+                timeval timeofday;
+                gettimeofday(&timeofday, NULL);
+                cout << "P" << p->get_pid() << ": Expecting yes or no. Unexpected msg received from P" << pid << buf<< " at "<<timeofday.tv_sec<<"."<<timeofday.tv_usec<<endl;
                 rcv_thread_arg->received_msg_type = ERROR;
             }
         }
@@ -332,11 +334,11 @@ void* ReceiveAckFromParticipant(void* _rcv_thread_arg) {
         p->RemoveFromUpSet(pid);
     } else {    // activity happened on the socket
         if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
-            cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
             rcv_thread_arg->received_msg_type = TIMEOUT;
             p->RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
             // if participant closes connection, it is equivalent to it crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
@@ -345,7 +347,7 @@ void* ReceiveAckFromParticipant(void* _rcv_thread_arg) {
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << p->get_pid() << ": Msg received from P" << pid << ": " << buf <<  endl;
+            cout << "P" << p->get_pid() << ": ACK received from P" << pid <<  endl;
 
             string extracted_msg;
             int received_tid;
@@ -357,7 +359,10 @@ void* ReceiveAckFromParticipant(void* _rcv_thread_arg) {
                 rcv_thread_arg->received_msg_type = ACK;
             } else {
                 //TODO: take actions appropriately, like check log for previous transaction decision.
-                cout << "P" << p->get_pid() << ": Unexpected msg received from P" << pid << buf << endl;
+                timeval timeofday;
+                gettimeofday(&timeofday, NULL);
+                cout << "P" << p->get_pid() << ": Expecting ack. Unexpected msg received from P" << pid << buf<< " at "<<timeofday.tv_sec<<"."<<timeofday.tv_usec<<endl;
+
                 rcv_thread_arg->received_msg_type = ERROR;
             }
         }
@@ -390,11 +395,11 @@ void* ReceiveStateFromParticipant(void* _rcv_thread_arg) {
         p->RemoveFromUpSet(pid);
     } else {    // activity happened on the socket
         if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
-            cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
             rcv_thread_arg->st = PROCESSTIMEOUT;
             p->RemoveFromUpSet(pid);
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
             // if participant closes connection, it is equivalent to it crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
@@ -403,7 +408,7 @@ void* ReceiveStateFromParticipant(void* _rcv_thread_arg) {
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << p->get_pid() << ": State Msg received from P" << pid << ": " << buf <<  endl;
+            cout << "P" << p->get_pid() << ": STATE received from P" << pid << ": " << buf <<  endl;
 
             string extracted_msg;
             int received_tid;
@@ -552,7 +557,7 @@ void* NewCoordinatorMode(void * _p) {
     //TODO: send tid to ConstructVoteReq;
     Process *p = (Process *)_p;
     ofstream outf("log/newcoord" + to_string(p->get_pid()) + "," + to_string(time(NULL) % 100), fstream::app);
-    outf << "NewCoordSet" << p->get_pid() << endl;
+    outf << "New Coordinator = " << p->get_pid() << endl;
 
     // connect to each participant
     p->participant_state_map_.clear();
@@ -637,7 +642,7 @@ void* NewCoordinatorMode(void * _p) {
     }
     if (uncert && my_st == UNCERTAIN)
     {
-        outf << "sending abort" <<  "at " << time(NULL) % 100 << endl;
+        outf << "sending abort" << endl;
         p->LogAbort();
         for (const auto& ps : p->participant_state_map_) {
             p->SendAbortToProcess(ps.first);
@@ -650,7 +655,7 @@ void* NewCoordinatorMode(void * _p) {
     //else
     //some are commitable
     p->LogPreCommit();
-    outf << "sending precommit at " << time(NULL) % 100 << endl;
+    outf << "sending precommit"<< endl;
     for (const auto& ps : p->participant_state_map_) {
         p->SendPreCommitToProcess(ps.first);
     }
@@ -658,7 +663,7 @@ void* NewCoordinatorMode(void * _p) {
     p->LogCommit();
     p->set_my_state(COMMITTED);
     p->SendCommitToAll();
-    outf << "sent commit " << "at " << time(NULL) % 100 << endl;
+    outf << "sent commit " << endl;
     if (my_st == ABORTED)
         p->prev_decisions_.push_back(ABORT);
     else

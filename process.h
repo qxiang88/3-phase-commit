@@ -112,10 +112,10 @@ public:
     void SendCommitToAll();
     bool ExtractFromVoteReq(const string &msg, string &transaction_msg );
     int WaitForVoteReq(string &transaction_msg);
-    void SendMsgToCoordinator(const string &msg_to_send);
-    void ReceivePreCommitOrAbortFromCoordinator();
-    void ReceiveAnythingFromCoordinator();
-    void ReceiveCommitFromCoordinator();
+    void SendMsgToCoordinator(const string &msg_to_send, int c_id);
+    void ReceivePreCommitOrAbortFromCoordinator(int c_id);
+    void ReceiveAnythingFromCoordinator(int c_id);
+    void ReceiveCommitFromCoordinator(int c_id);
     void CreateAliveThreads(vector<pthread_t> &receive_alive_thread, pthread_t &send_alive_thread);
     void CreateSDRThread(int process_id, pthread_t &sdr_receive_thread);
     void CreateUpThread(int process_id, pthread_t &up_receive_thread);
@@ -238,7 +238,7 @@ public:
     // set of all alive threads created by a process
     std::unordered_set<pthread_t> thread_set_alive_;
     bool new_coord_thread_made;
-
+    bool dead;
     vector<ReceiveAliveThreadArgument*> rcv_alive_thread_arg;
 
     // ofstream backout;
@@ -339,6 +339,11 @@ struct ReceiveSDRUpThreadArgument
     int for_whom;
 };
 
+struct ReceiveCoordThreadArgument
+{
+    Process *p;
+    int c_id;
+};
 
 
 #endif //PROCESS_H

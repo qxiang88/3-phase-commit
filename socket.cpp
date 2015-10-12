@@ -112,28 +112,19 @@ bool Process::ConnectToProcess(int process_id) {
     {
         errno = 0;
         if (connect(sockfd, l->ai_addr, l->ai_addrlen) == -1) {
-            // cout << sockfd << endl;
             close(sockfd);
-            // if (errno == EBADF) cout << errno << endl;
             continue;
         }
 
         break;
     }
     if (l == NULL) {
-        // cout << "P" << get_pid() << ": Client: connect ERROR "<<strerror(errno)<<endl;
         return false;
-        // exit(1);
     }
     int outgoing_port = ntohs(return_port_no((struct sockaddr *)l->ai_addr));
-    // cout << "P" << get_pid() << ": Client: connecting to " << outgoing_port << endl ;
     freeaddrinfo(servinfo); // all done with this structure
     set_fd(process_id, sockfd);
 
-    // timeval t;
-    // gettimeofday(&t, NULL);
-    // cout << get_pid() << "to" << process_id<<"for new"<<get_fd(process_id)<<"at"<<t.tv_sec<<","<<t.tv_usec<<endl;
-    // cout << "P" << get_pid() << ": Initiating connection to P" << process_id << endl;
     return true;
 }
 
@@ -187,7 +178,7 @@ void* server(void* _p) {
     freeaddrinfo(servinfo); // all done with this structure
 
     if (l == NULL) {
-        fprintf(stderr, "server: failed to bind\n");
+        cout<<"server: failed to bind"<<endl;
         exit(1);
     }
 
@@ -244,8 +235,6 @@ void* server(void* _p) {
                     p->set_up_fd(process_id, new_fd);
 
                 }
-                // cout << "P" << p->get_pid() << ": Server: accepting SDR connection from P"
-                // << p->get_sdr_port_pid_map(incoming_port) << endl;
             }
         }
     }

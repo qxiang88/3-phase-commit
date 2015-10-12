@@ -48,11 +48,11 @@ void Process::SendState(int recp)
     timeval temptime;
     gettimeofday(&temptime, NULL);
     if (send(get_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending state to P" << recp << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
+        // cout << "P" << get_pid() << ": ERROR: sending state to P" << recp << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
         RemoveFromUpSet(recp);
     }
     else {
-        cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
+        cout << "P" << get_pid() << ": STATE sent to P" << recp << ": " << msg << endl;
     }
     DecrementNumMessages();
 }
@@ -72,11 +72,11 @@ void Process::SendDecision(int recp)
     timeval aftertime;
     gettimeofday(&aftertime, NULL);
     if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
+        // cout << "P" << get_pid() << ": ERROR: sending decision to P" << recp << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
         RemoveFromUpSet(recp);
     }
     else {
-        cout << "P" << get_pid() << ": decision Msg sent to P" << recp << ": " << msg << "at " << aftertime.tv_sec << ", " << aftertime.tv_usec << endl;
+        cout << "P" << get_pid() << ": DEC sent to P" << recp << ": " << msg << endl;
     }
     DecrementNumMessages();
 }
@@ -89,11 +89,11 @@ void Process::SendPrevDecision(int recp, int tid)
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
     ContinueOrDie();
     if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending prev dec to P" << recp << endl;
+        // cout << "P" << get_pid() << ": ERROR: sending prev dec to P" << recp << endl;
         RemoveFromUpSet(recp);
     }
     else {
-        cout << "P" << get_pid() << ": Msg sent to P" << recp << ": " << msg << endl;
+        cout << "P" << get_pid() << ": PREV-DEC sent to P" << recp << ": " << msg << endl;
     }
     DecrementNumMessages();
 }
@@ -110,12 +110,12 @@ bool Process::SendURElected(int recp)
     timeval temptime;
     gettimeofday(&temptime, NULL);
     if (send(get_sdr_fd(recp), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending urelected to P" << recp << endl;
+        // cout << "P" << get_pid() << ": ERROR: sending urelected to P" << recp << endl;
         RemoveFromUpSet(recp);
         ret = false;
     }
     else {
-        cout << "P" << get_pid() << ": URElected Msg sent to P" << recp << ": " << msg << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
+        cout << "P" << get_pid() << ": UR-ELECTED sent to P" << recp <<" at "<<time(NULL)<<endl;
         ret = true;
     }
     DecrementNumMessages();
@@ -129,11 +129,11 @@ void Process::SendAbortToProcess(int process_id) {
     ConstructGeneralMsg(kAbort, transaction_id_, msg);
     ContinueOrDie();
     if (send(get_fd(process_id), msg.c_str(), msg.size(), 0) == -1) {
-        cout << "P" << get_pid() << ": ERROR: sending abort to P" << process_id << endl;
+        // cout << "P" << get_pid() << ": ERROR: sending abort to P" << process_id << endl;
         RemoveFromUpSet(process_id);
     }
     else {
-        cout << "P" << get_pid() << ": Msg sent to P" << process_id << ": " << msg << endl;
+        cout << "P" << get_pid() << ": ABORT sent to P" << process_id << endl;
     }
     DecrementNumMessages();
 }
@@ -144,18 +144,17 @@ void Process::SendDecReqToAll(const string & msg) {
     //this only contains operational processes for non timeout cases
     for ( auto it = participants_.begin(); it != participants_.end(); ++it ) {
         if ((*it) == get_pid()) continue; // do not send to self
-        // cout << "P" << get_pid() << ": sdr_fd for P" << (*it) << "=" << get_sdr_fd(*it) << endl;
-        ContinueOrDie();
+        // cout << "P" << get_pid() << ": sending for P" << (*it) << "on" << get_sdr_fd(*it) << endl;
         if (send(get_sdr_fd(*it), msg.c_str(), msg.size(), 0) == -1) {
             // cout << "P" << get_pid() << ": ERROR1: sending to P" << (*it) << endl;
             // RemoveFromUpSet(*it);
             // no need to update up set
         }
         else {
-            // cout << "P" << get_pid() << ": Msg sent to P" << (*it) << ": " << msg << endl;
+
         }
-        DecrementNumMessages();
     }
-        // cout<<"P"<<get_pid()<<"sent decreq msgs"<<endl;
+    cout << "P" << get_pid() << ": DEC-REQ sent" << endl;
+
 
 }

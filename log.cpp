@@ -123,20 +123,6 @@ void Process::LoadTransactionId()
         cout << "Error. Log empty" << endl;
 }
 
-// bool Process::CheckCoordinator()
-// {
-//     transaction_id_ = (log_.rbegin())->first;
-//     size_t found;
-//     for(auto it= log_[transaction_id_].begin(); it!=log_[transaction_id_].end(); it++)
-//         {
-//             found = log_[transaction_id_][*it].find("start");
-//             if (found != string::npos)
-//                 return true;
-
-//         }
-//     return false;
-// }
-
 void Process::LoadUp()
 {
     vector<string> cur_trans_log = log_[transaction_id_];
@@ -213,28 +199,6 @@ void Process::LoadParticipants()
 
 
 }
-
-// int Process::GetCoordinator()
-// {
-
-//     transaction_id_ = (log_.rbegin())->first;
-//     size_t found,found2;
-//     for(auto it= log_[transaction_id_].begin(); it!=log_[transaction_id_].end(); it++)
-//         {
-//             found = log_[transaction_id_][*it].find("start");
-//             if (found != string::npos)
-//                 return *it;
-
-//             found2 = log_[transaction_id_][*it].find("votereq");
-//             if(found2!=string::npos)
-//                 {
-//                     entry = log_[transaction_id_][*it];
-//                     vector<string> tokens = split(entry, ' ');
-//                     return atoi(tokens[1].c_str());
-//                 }
-//         }
-// }
-
 
 //initial ones just to maintain uniformity. can be removed if want to handle string while calling
 void Process::LogCommit()

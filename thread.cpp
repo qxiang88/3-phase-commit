@@ -77,7 +77,9 @@ void Process::CreateThreadForAlive(pthread_t &thread, void* (*f)(void* ), void* 
         cout << "P" << get_pid() << ": ERROR: Unable to create thread" << endl;
         pthread_exit(NULL);
     }
+    // cout<<get_pid()<<" SetAlive size is "<<thread_set_alive_.size()<<endl;
     AddThreadToSetAlive(thread);
+    // cout<<get_pid()<<" SetAlive size is "<<thread_set_alive_.size()<<endl;
 }
 
 // creates one receive alive thread

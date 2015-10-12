@@ -47,7 +47,7 @@ void* ThreadEntry(void* _p) {
     p->InitializeLocks();
 
     if (!(p->LoadPlaylist())) {
-        cout << "P" << p->get_pid() << ": Exiting" << endl;
+        cout << "P" << p->get_pid() << ": Error in loading playlist. Exiting" << endl;
         pthread_exit(NULL);
     }
 
@@ -131,6 +131,7 @@ void Process::Initialize(int pid,
     newcoord_thread = 0;
     state_req_in_progress = false;
     new_coord_thread_made = false;
+    dead = false;
     decision_logged_ = false;
     server_sockfd_ = -1;
     num_messages_ = kMaxMessages;
@@ -153,6 +154,7 @@ void Process::Reset(int coord_id) {
     newcoord_thread = 0;
     new_coord_thread_made = false;
     state_req_in_progress = false;
+    dead = false;
     decision_logged_ = false;
     num_messages_ = kMaxMessages;
     handshake_ = BLANK;
@@ -608,7 +610,6 @@ void Process::DecrementNumMessages() {
 // removes itself from Controller's alive process set
 // kills itself
 void Process::Die() {
-    // usleep(kKillSleep);
     set_my_status(DYING);
     for (const auto &th : thread_set) {
         pthread_cancel(th);
@@ -623,6 +624,7 @@ void Process::Die() {
     Close_server_sockfd();
     RemoveFromAliveProcessIds(pthread_self());
     // FreeProcessMemory(get_pid());
+    usleep(kGeneralSleep);
     pthread_cancel(pthread_self());
 }
 

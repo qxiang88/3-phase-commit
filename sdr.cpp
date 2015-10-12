@@ -62,7 +62,7 @@ bool Process::ConnectToProcessSDR(int process_id) {
     }
     freeaddrinfo(clientinfo); // all done with this structure
     if (l == NULL)  {
-        fprintf(stderr, "client: failed to bind\n");
+        cout<<"client: failed to bind"<<endl;
         exit(1);
     }
 
@@ -96,21 +96,19 @@ bool Process::ConnectToProcessSDR(int process_id) {
     {
         if (connect(sockfd, l->ai_addr, l->ai_addrlen) == -1) {
             close(sockfd);
-            // cout << "P" << get_pid() << ": Client1: connect ERROR"<<endl;
             continue;
         }
 
         break;
     }
     if (l == NULL) {
-        // fprintf(stderr, "client: failed to connect\n");
         return false;
     }
     int outgoing_port = ntohs(return_port_no((struct sockaddr *)l->ai_addr));
     // cout << "P" << get_pid() << ": Client: connecting to " << outgoing_port << endl ;
     freeaddrinfo(servinfo); // all done with this structure
     set_sdr_fd(process_id, sockfd);
-    // cout << "P" << get_pid() << ": Initiating SDR connection to P" << process_id << endl;
+    // cout << "P" << get_pid() << "using "<<get_sdr_fd(process_id) << " for P" << process_id << endl;
     return true;
 }
 
@@ -135,12 +133,12 @@ void* ReceiveStateOrDecReq(void* _arg) {
         while (p->get_sdr_fd(pid) == -1) {
             usleep(kMiniSleep);
         }
-
+        // outf<<pid<<" sdr_fd="<<p->get_sdr_fd(pid)<<endl;
         if ((num_bytes = recv(p->get_sdr_fd(pid), buf, kMaxDataSize - 1, 0)) == -1)
         {
             timeval aftertime;
             gettimeofday(&aftertime, NULL);
-            cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
+            // cout << "P" << p->get_pid() << ": ERROR in receiving SDR for P" << pid << " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
             p->RemoveFromUpSet(pid);
             // no need to exit even if there is an error. Hopefully in future, pid will recover
             // and SDRconnect to this process which will set the sdr_fd correctly
@@ -161,6 +159,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
             for(auto it=all_msgs.begin(); it!=all_msgs.end(); it++)
             {
                 string msg = *it;
+                cout<<*it<<endl;
                 string type_req, buffer_data;
                 int recvd_tid;
                 // buffer_data = string(buf);
@@ -169,7 +168,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
                 timeval temptime;
                 gettimeofday(&temptime, NULL);
 
-                outf << "P" << p->get_pid() << ": SDR recevd from P" << pid << ": " << msg << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
+                outf << "P" << p->get_pid() << ": SDR recevd from P" << pid << ": " << msg << endl;
 
                 int my_coord = p->get_my_coordinator();
                 if (type_req == kStateReq)
@@ -188,7 +187,11 @@ void* ReceiveStateOrDecReq(void* _arg) {
                             pthread_cancel(sr_response_thread);
                             p->RemoveThreadFromSet(sr_response_thread);    //TODO: SC added this
 
-                            p->CreateThread(sr_response_thread, responder, (void *)p);
+                            ReceiveCoordThreadArgument* arg = new ReceiveCoordThreadArgument;
+                            arg->p = p;
+                            arg->c_id = pid;
+                            p->CreateThread(sr_response_thread, responder, (void *)arg);
+                            
                             //whyat shud be my mode now
                         }
                     }
@@ -204,7 +207,10 @@ void* ReceiveStateOrDecReq(void* _arg) {
                             pthread_cancel(sr_response_thread);
                             p->RemoveThreadFromSet(sr_response_thread);    //TODO: SC added this
                             //create responder thread
-                            p->CreateThread(sr_response_thread, responder, (void *)p);
+                            ReceiveCoordThreadArgument* arg = new ReceiveCoordThreadArgument;
+                            arg->p = p;
+                            arg->c_id = pid;
+                            p->CreateThread(sr_response_thread, responder, (void *)arg);
 
                         }
                     }
@@ -212,10 +218,10 @@ void* ReceiveStateOrDecReq(void* _arg) {
                 }
                 else if (type_req == kURElected)
                 {
-                    outf << "I am elected. my coord was " << my_coord << ", my id is " << p->get_pid() << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
                     if (my_coord <= p->get_pid())
                         continue;
 
+                    outf << "I am elected. my coord was " << my_coord << ", my id is " << p->get_pid() << endl;
 
                     bool templ = false;
                     pthread_mutex_lock(&new_coord_lock);
@@ -227,17 +233,12 @@ void* ReceiveStateOrDecReq(void* _arg) {
 
                     pthread_mutex_unlock(&new_coord_lock);
                     if (templ) {
-                        cout<<p->get_pid()<<"creating newcoord_thread"<<endl;
-
                         p->CreateThread(p->newcoord_thread, NewCoordinatorMode, (void *)p);
                     }
 
                 }
                 else if(type_req == kDecReq)
                 { //decreq
-                    timeval t;
-                    gettimeofday(&t, NULL);
-                    outf << "Dec req received; alive= " << p->get_alive_fd(pid) << " sdr=" << p->get_sdr_fd(pid) << "fd=" << p->get_fd(pid) << "at" << t.tv_sec << "," << t.tv_usec << endl;
                     if (recvd_tid == p->get_transaction_id())
                     {
                         if (p->get_my_state() == COMMITTED || p->get_my_state() == ABORTED)
@@ -251,22 +252,9 @@ void* ReceiveStateOrDecReq(void* _arg) {
                 else{
                     string decision = type_req;
                     
-
-                    // if(!(get_my_state()==COMMITTED || get_my_state() == ABORTED))
-                    // {
-                    //     cout << "P" << p->get_pid() << ": DecMsg received from P" << pid << ": ";
-                    //     if (decision == "0")
-                    //         cout << "Abort" << endl;
-                    //     else if (decision == "1")
-                    //         cout << "Commit" << endl;
-                    //     else
-                    //         cout << decision << endl;
-                    // }
-                    
                     Decision dec = static_cast<Decision>(atoi(decision.c_str()));
                     if (dec == COMMIT)
                     {
-                    
                         p->set_my_state(COMMITTED);
                     }
                     else if (dec== ABORT)
@@ -285,11 +273,14 @@ void* ReceiveStateOrDecReq(void* _arg) {
 }
 
 
-void* responder(void *_p) {
+void* responder(void *_arg) {
 
-    Process *p = (Process *)_p;
-    p->SendState(p->get_my_coordinator());
-    // cout << "sent state to new coord at " << time(NULL) % 100 << endl;
+    ReceiveCoordThreadArgument* arg = (ReceiveCoordThreadArgument*)_arg;
+    Process* p = arg->p;
+    int c_id = arg->c_id;
+
+    p->SendState(c_id);
+    cout << "sent state to "<<c_id<<" at " << time(NULL) % 100 << endl;
     ProcessState my_st = p->get_my_state();
     if (!(my_st == UNCERTAIN || my_st == COMMITTABLE)) {
         p->RemoveThreadFromSet(pthread_self());
@@ -298,7 +289,7 @@ void* responder(void *_p) {
 
     if (my_st == UNCERTAIN)
     {
-        p->ReceivePreCommitOrAbortFromCoordinator();
+        p->ReceivePreCommitOrAbortFromCoordinator(c_id);
         if (p->get_my_state() == UNCERTAIN) {
             p->set_state_req_in_progress(false);
             p->Timeout();
@@ -307,8 +298,8 @@ void* responder(void *_p) {
             p->LogAbort();
         else {
             p->LogPreCommit();
-            p->SendMsgToCoordinator(kAck);
-            p->ReceiveCommitFromCoordinator();
+            p->SendMsgToCoordinator(kAck,c_id);
+            p->ReceiveCommitFromCoordinator(c_id);
             if (p->get_my_state() == COMMITTABLE) {
                 p->set_state_req_in_progress(false);
                 p->Timeout();
@@ -320,13 +311,13 @@ void* responder(void *_p) {
         }
     }
     else {
-        p->ReceiveAnythingFromCoordinator();
+        p->ReceiveAnythingFromCoordinator(c_id);
         if (p->get_my_state() == COMMITTABLE) {
             p->LogPreCommit();
-            p->SendMsgToCoordinator(kAck);
+            p->SendMsgToCoordinator(kAck,c_id);
             // cout << p->get_pid() << " sent ack to coord at " << time(NULL) % 100 << endl;
 
-            p->ReceiveCommitFromCoordinator();
+            p->ReceiveCommitFromCoordinator(c_id);
             if (p->get_my_state() == COMMITTABLE) {
                 p->set_state_req_in_progress(false);
                 p->Timeout();

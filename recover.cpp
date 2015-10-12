@@ -80,10 +80,6 @@ void Process::Recovery()
         }
     }
 
-    // pthread_t send_alive_thread;
-    // vector<pthread_t> receive_alive_threads(up_.size());
-    // CreateAliveThreads(receive_alive_threads, send_alive_thread);
-
     // one sdr receive thread for each participant, not just those in up_
     // because any participant could ask for Dec Req in future.
     // size = participant_.size()-1 because it contains self
@@ -105,13 +101,13 @@ void Process::Recovery()
     if (decision == "commit")
     {
         set_my_state(COMMITTED);
-        cout << "Had received commit" << endl;
+        cout << "Had received COMMIT" << endl;
     }
 
     else if (decision == "abort")
     {
         set_my_state(ABORTED);
-        cout << "Had received abort" << endl;
+        cout << "Had received ABORT" << endl;
     }
 
     else if (decision == "precommit")
@@ -119,19 +115,6 @@ void Process::Recovery()
         set_my_state(COMMITTABLE);
         SetUpAndWaitRecovery();
         LogCommitOrAbort();
-
-        // bool local_decreached = false;
-        // pthread_mutex_lock(&decision_reached_lock);
-        // set_decision_reached(false);
-        // pthread_mutex_unlock(&decision_reached_lock);
-        // while(!local_decreached)
-        // {
-        //     sleep(kGeneralSleep);
-        //     pthread_mutex_lock(&decision_reached_lock);
-        //     local_decreached = get_decision_reached();
-        //     pthread_mutex_unlock(&decision_reached_lock);
-        // }
-
     }
 
     else
@@ -139,14 +122,14 @@ void Process::Recovery()
         string vote = GetVote();
         if (vote == "yes")
         {
-            cout << "Had voted yes" << endl;
+            cout << "Had voted YES" << endl;
             set_my_state(UNCERTAIN);
             SetUpAndWaitRecovery();
             LogCommitOrAbort();
         }
         else if (vote.empty())
         {
-            cout << "Hadnt voted. So aborting" << endl;
+            cout << "Hadn't voted. ABORTING" << endl;
             set_my_state(ABORTED);
             LogAbort();
         }
@@ -154,14 +137,13 @@ void Process::Recovery()
 
 }
 
-
 void Process::TerminationProtocol()
 {   //called when a process times out.
 
     //reset statereq variable
     // state_req_in_progress = true;
     //sets new coord
-    cout << "TerminationProtocol by" << get_pid() << " at " << time(NULL) % 100 << endl;
+    cout << "Termination Protocol by" << get_pid() << endl;
     // bool status = false;
     // while(!status){
     ElectionProtocol();
@@ -187,7 +169,6 @@ void Process::TerminationProtocol()
 
         pthread_mutex_unlock(&new_coord_lock);
         if (templ) {
-            cout<<get_pid()<<"creating newcoord_thread"<<endl;
             CreateThread(newcoord_thread, NewCoordinatorMode, (void *)this);
             pthread_join(newcoord_thread, &status);
             RemoveThreadFromSet(newcoord_thread);
@@ -224,8 +205,7 @@ void Process::TerminationProtocol()
         //till we get a decision
         // TerminationParticipantMode();
     }
-    // }
-    cout<<"TerminationProtocol done"<<endl;
+    cout << "Termination Protocol by" << get_pid() << " over"<< endl;
 }
 
 void Process::ElectionProtocol()
@@ -239,9 +219,19 @@ int Process::GetNewCoordinator()
 {
     // ofstream ofile("log/selectnewcoord"+to_string(get_pid())+","+to_string(time(NULL)%100));
     int min;
-    pthread_mutex_lock(&previous_up_lock);
-    set<int> copy_up(previous_up_);
-    pthread_mutex_unlock(&previous_up_lock);
+    set<int> copy_up;
+
+    if(get_my_status() == RECOVERY) {
+    
+        pthread_mutex_lock(&previous_up_lock);
+        copy_up = previous_up_;
+        pthread_mutex_unlock(&previous_up_lock);
+        
+    } else {
+        pthread_mutex_lock(&up_lock);
+        copy_up = up_;
+        pthread_mutex_unlock(&up_lock);
+    }
 
     for ( auto it = copy_up.cbegin(); it != copy_up.cend(); ++it )
     {
@@ -340,10 +330,10 @@ void* ReceiveDecision(void* _rcv_thread_arg)
         rcv_thread_arg->received_msg_type = TIMEOUT;
     } else {    // activity happened on the socket
         if ((num_bytes = recv(p->get_fd(pid), buf, kMaxDataSize - 1, 0)) == -1) {
-            cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": ERROR in receiving for P" << pid << endl;
             rcv_thread_arg->received_msg_type = TIMEOUT;
         } else if (num_bytes == 0) {     //connection closed
-            cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
+            // cout << "P" << p->get_pid() << ": Connection closed by P" << pid << endl;
             // if participant closes connection, it is equivalent to it crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
@@ -351,11 +341,11 @@ void* ReceiveDecision(void* _rcv_thread_arg)
             //TODO: handle connection close based on different cases
         } else {
             buf[num_bytes] = '\0';
-            cout << "P" << p->get_pid() << ": DecMsg received from P" << pid << ": ";
+            cout << "P" << p->get_pid() << ": DECISION received from P" << pid << ": ";
             if (buf[0] == '0')
-                cout << "Abort" << endl;
+                cout << "ABORT" << endl;
             else if (buf[1] == '1')
-                cout << "Commit" << endl;
+                cout << "COMMIT" << endl;
             else
                 cout << buf << endl;
 
@@ -376,13 +366,8 @@ void* ReceiveDecision(void* _rcv_thread_arg)
             {
                 p->set_my_state(ABORTED);
             }
-
-
-
-            //assumes that correct message type is sent by participant
         }
     }
-    // cout << "P" << p->get_pid() << ": Receive thread exiting for P" << pid << endl;
     return NULL;
 }
 
@@ -401,7 +386,6 @@ void Process::DecisionRequest()
     //if total failure, then init termination protocol with total failure. give arg to TP
     ProcessState local_my_state;
 
-    // sleep(15);
     while (true)
     {
         // outd << "Starting dec req to all " << endl;
@@ -431,11 +415,7 @@ bool Process::CheckForTotalFailure(set<int> &alive_processes_now, set<int> &inte
     ofstream outer("log/computeup"+to_string(get_pid()), fstream::app);
 
     alive_processes_now.clear();
-    outer<<"intilized intersection: ";
-    for(auto it = intersection_up.begin(); it!=intersection_up.end(); it++)
-        outer<<*it<<" ";
-    outer<<endl;
-    outer<<"Processes that sent me up: ";
+    outer<<"Processes that sent me UP: ";
     //what happens if someone doesnt send up set now
     for(auto iter = all_up_sets_.begin(); iter!=all_up_sets_.end(); iter++)
     {
@@ -459,7 +439,7 @@ bool Process::CheckForTotalFailure(set<int> &alive_processes_now, set<int> &inte
         outer<<iter->first<<",";
     }
     outer<<endl;
-    outer<<"intersection: ";
+    outer<<"Current intersection: ";
     for(auto it = intersection_up.begin(); it!=intersection_up.end(); it++)
         outer<<*it<<" ";
     outer<<endl;
@@ -494,7 +474,7 @@ bool Process::CheckForTotalFailure(set<int> &alive_processes_now, set<int> &inte
     }
     else
     {
-        outer<<"Cant decide now"<<endl;
+        outer<<"Can't decide now"<<endl;
         outer.close();
         //last p to fail hasnt come
         return false;
@@ -518,6 +498,11 @@ void Process::TotalFailure()
     bool operational_process_exists = false;
     set<int> alive_processes_now;
 
+    outer<<"Initial intersection (my UP set): ";
+    for(auto it = intersection_up.begin(); it!=intersection_up.end(); it++)
+        outer<<*it<<" ";
+    outer<<endl;
+
     while (true)
     {
         outer<<"Starting total failure check"<<endl;
@@ -526,21 +511,20 @@ void Process::TotalFailure()
         usleep(kGeneralTimeout);
         
         operational_process_exists = false;
-        outer<<"abt to enter checking "<<endl;
         bool is_total_failure = CheckForTotalFailure(alive_processes_now,intersection_up, crashed, operational_process_exists);
-        if(operational_process_exists)
-            continue;
-        if(!is_total_failure)
-            outer<<"Can't determine total failure"<<endl;
-        else
-            {
-                up_ =  alive_processes_now;
-                // up_.erase(get_pid());
-                TerminationProtocol();
-            }
+        if(!operational_process_exists) {
+            if(!is_total_failure)
+                outer<<"Can't determine total failure"<<endl;
+            else
+                {
+                    up_ =  alive_processes_now;
+                    TerminationProtocol();
+                }
+        }
+
 
         local_my_state = get_my_state();
-        
+
         if (local_my_state == ABORTED)
         {
             break;

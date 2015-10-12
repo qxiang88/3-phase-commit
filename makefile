@@ -49,5 +49,5 @@ cleanlog:
 	mkdir log/sdr/
 	mkdir log/up/
 	mkdir log/backout/
-	# ./controller
+	./controller
 	

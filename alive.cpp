@@ -221,6 +221,10 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
 
     int start_time = time(NULL) % 100;
     while (true) {
+        pthread_testcancel();
+        if(p->get_my_status() == DYING)
+            break;
+
         string alive_to_check = "ALIVE" + to_string(start_time);
         timeval beforetime, aftertime;
         // errno = 0;
@@ -248,17 +252,19 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
         }
         else
         {
+            pthread_testcancel();
             buf[num_bytes] = '\0';
             outf << "P" << p->get_pid() << ": ALIVE received from P" << pid << ": "  << buf << " at " << time(NULL) % 100 << endl;
             // outf << "P" << p->get_pid() << ": ALIVE received from P" << pid << ": "  << buf << " at " << time(NULL) % 100 <<  " t=" << aftertime.tv_sec << "," << aftertime.tv_usec << endl;
 
             string bufstring(buf);
 
-            vector<string> all_msgs = split(bufstring, ' ');
+            vector<string> all_msgs = split(bufstring, '$');
             // outf << "P:" << p->get_pid() << " All msgs size=" << all_msgs.size() << endl;
             for (auto iter = all_msgs.begin(); iter != all_msgs.end(); iter++)
             {
                 buffered_alives.insert(*iter);
+                // cout<<*iter<<endl;
             }
         }
 
@@ -287,7 +293,10 @@ void* ReceiveAlive(void *_rcv_thread_arg) {
 
         start_time = (start_time + kReceiveAliveTimeoutTimeval.tv_sec) % 100;
         sleep((beforetime.tv_sec + kReceiveAliveTimeoutTimeval.tv_sec) - aftertime.tv_sec);
+        pthread_testcancel();
+
     }
+    return NULL;
 }
 
 // thread for sending ALIVE messages to up_ processes
@@ -299,10 +308,17 @@ void* SendAlive(void *_p) {
     ofstream outf("log/sendalivelog/" + to_string(p->get_pid()));
     if (!outf.is_open())
         cout << "Failed to open log file for send alive" << endl;
+
+    int* oltemp;
+
     while (true) {
+        pthread_testcancel();
+        if(p->get_my_status() == DYING)
+            break;
+
         string msg = kAlive;
         msg += to_string(time(NULL) % 100);
-        msg += " ";
+        msg += "$";
         pthread_mutex_lock(&up_lock);
         set<int> up_copy(p->up_);
         pthread_mutex_unlock(&up_lock);
@@ -317,7 +333,7 @@ void* SendAlive(void *_p) {
                 //     //TODO: Hopefully, receive will timeout soon
                 //     // and will remove it from UP set
                 // } else {
-                cout << "P" << p->get_pid() << ": ERROR: sending ALIVE to P" << (*it) << endl;
+                // cout << "P" << p->get_pid() << ": ERROR: sending ALIVE to P" << (*it) << endl;
                 p->RemoveFromUpSet(*it);
                 it++;
                 // }
@@ -330,10 +346,12 @@ void* SendAlive(void *_p) {
                 it++;
             }
         }
-
+        pthread_testcancel();
         usleep(kSendAliveInterval);
     }
-    cout << "Exiting" << endl;
+    cout << "AliveExiting" << endl;
+
+    return NULL;
 }
 
 void PrintUpSet(int whose, set<int> up_)
