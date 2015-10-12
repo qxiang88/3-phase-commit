@@ -208,8 +208,8 @@ public:
     void set_my_status(ProcessRunningStatus status);
     void set_server_sockfd(int socket_fd);
     int get_server_sockfd();
-    int get_num_messages();
-    void set_num_messages(int num);
+    float get_num_messages();
+    void set_num_messages(float num);
     bool get_decision_logged();
     void set_decision_logged();
     void Close_server_sockfd();
@@ -218,6 +218,7 @@ public:
     void reset_up_fd(int process_id);
     void reset_sdr_fd(int process_id);
     void my_backtrace();
+
 
 
     // list of processes operational for a transaction (and hence, an iteration of 3PC)
@@ -285,7 +286,7 @@ private:
     // float value because a value like 2.5 can be used to encode case
     // where process sends 2 messages and waits for receive
     // as oppposed to value=2, where process dies immediately after sending msg2
-    int num_messages_;
+    float num_messages_;
     bool decision_logged_;
 
 };

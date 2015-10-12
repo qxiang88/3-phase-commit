@@ -320,8 +320,8 @@ Handshake Process::get_handshake() {
     return handshake_;
 }
 
-int Process::get_num_messages() {
-    int num;
+float Process::get_num_messages() {
+    float num;
     pthread_mutex_lock(&num_messages_lock);
     num = num_messages_;
     pthread_mutex_unlock(&num_messages_lock);
@@ -430,7 +430,7 @@ void Process::set_handshake(Handshake hs) {
     handshake_ = hs;
 }
 
-void Process::set_num_messages(int num) {
+void Process::set_num_messages(float num) {
     pthread_mutex_lock(&num_messages_lock);
     num_messages_ = num;
     pthread_mutex_unlock(&num_messages_lock);
