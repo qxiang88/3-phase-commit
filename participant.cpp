@@ -280,7 +280,6 @@ void Process::ReceiveAnythingFromCoordinator() {
 // on timeout, initiates termination protocol
 void Process::ReceiveCommitFromCoordinator() {
     int pid = get_my_coordinator();
-    cout<<"IN function"<<endl;
     char buf[kMaxDataSize];
     int num_bytes;
     //TODO: write code to extract multiple messages

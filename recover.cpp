@@ -46,17 +46,17 @@ void Process::Recovery()
 
     LoadParticipants();
     LoadUp();
-    cout << "Transaction id: " << transaction_id_ << endl;
-    cout << "Up set: ";
-    for (auto const &p : previous_up_) {
-        cout << p << " ";
-    }
-    cout << endl;
-    cout << "Participants: ";
-    for (auto const &p : participants_) {
-        cout << p << " ";
-    }
-    cout << endl;
+    // cout << "Transaction id: " << transaction_id_ << endl;
+    // cout << "Up set: ";
+    // for (auto const &p : previous_up_) {
+    //     cout << p << " ";
+    // }
+    // cout << endl;
+    // cout << "Participants: ";
+    // for (auto const &p : participants_) {
+    //     cout << p << " ";
+    // }
+    // cout << endl;
 
 
     for (auto const &p : participants_) {
@@ -67,16 +67,16 @@ void Process::Recovery()
                 if (ConnectToProcessUp(p)) {
 
                 } else {
-                    cout << "P" << get_pid() << ": Unable to connect UP to P" << p << endl;
+                    // cout << "P" << get_pid() << ": Unable to connect UP to P" << p << endl;
                 }
             }
-            else
-                cout << "P" << get_pid() << ": Unable to connect sdr to P" << p << endl;
+            // else
+                // cout << "P" << get_pid() << ": Unable to connect sdr to P" << p << endl;
 
         } else {
             //TODO: I don't think we need to do anything special
             // apart from not adding participant_[i] to the upset.
-            cout << "P" << get_pid() << ": Unable to connect to P" << p << endl;
+            // cout << "P" << get_pid() << ": Unable to connect to P" << p << endl;
         }
     }
 
@@ -394,6 +394,7 @@ void* SendDecReq(void *_p) {
 
 void Process::DecisionRequest()
 {
+    // ofstream outd("log/decreq"+to_string(get_pid()), fstream::app);
     string msg;
     string msg_to_send = kDecReq;
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
@@ -403,9 +404,10 @@ void Process::DecisionRequest()
     // sleep(15);
     while (true)
     {
-        cout << "Starting dec req to all " << endl;
+        // outd << "Starting dec req to all " << endl;
         SendDecReqToAll(msg);
-        WaitForDecisionResponse();
+        usleep(kGeneralSleep);
+        // WaitForDecisionResponse();
         local_my_state = get_my_state();
 
         if (local_my_state == ABORTED)

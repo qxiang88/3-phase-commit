@@ -608,7 +608,7 @@ void Process::DecrementNumMessages() {
 // removes itself from Controller's alive process set
 // kills itself
 void Process::Die() {
-    usleep(kKillSleep);
+    // usleep(kKillSleep);
     set_my_status(DYING);
     for (const auto &th : thread_set) {
         pthread_cancel(th);

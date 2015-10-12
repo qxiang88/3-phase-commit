@@ -157,93 +157,127 @@ void* ReceiveStateOrDecReq(void* _arg) {
         else
         {
             buf[num_bytes] = '\0';
-            string type_req, buffer_data;
-            int recvd_tid;
-            buffer_data = string(buf);
-            p->ExtractMsg(buffer_data, type_req, recvd_tid);
+            vector<string> all_msgs = split(string(buf),'$');
+            for(auto it=all_msgs.begin(); it!=all_msgs.end(); it++)
+            {
+                string msg = *it;
+                string type_req, buffer_data;
+                int recvd_tid;
+                // buffer_data = string(buf);
+                p->ExtractMsg(msg, type_req, recvd_tid);
 
-            timeval temptime;
-            gettimeofday(&temptime, NULL);
+                timeval temptime;
+                gettimeofday(&temptime, NULL);
 
-            outf << "P" << p->get_pid() << ": SDR recevd from P" << pid << ": " << buf << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
+                outf << "P" << p->get_pid() << ": SDR recevd from P" << pid << ": " << msg << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
 
-            int my_coord = p->get_my_coordinator();
-            if (type_req == kStateReq)
-            {   //assumes state req has to be current tid
+                int my_coord = p->get_my_coordinator();
+                if (type_req == kStateReq)
+                {   //assumes state req has to be current tid
 
-                if (my_coord == p->get_pid())
-                {
-                    //i am coordinator and have received state req
-                    if (pid < (p->get_pid()))
+                    if (my_coord == p->get_pid())
                     {
-                        pthread_cancel(p->newcoord_thread);
-                        p->RemoveThreadFromSet(p->newcoord_thread);    //TODO: SC added this
+                        //i am coordinator and have received state req
+                        if (pid < (p->get_pid()))
+                        {
+                            pthread_cancel(p->newcoord_thread);
+                            p->RemoveThreadFromSet(p->newcoord_thread);    //TODO: SC added this
 
-                        p->set_my_coordinator(pid);
-
-                        pthread_cancel(sr_response_thread);
-                        p->RemoveThreadFromSet(sr_response_thread);    //TODO: SC added this
-
-                        p->CreateThread(sr_response_thread, responder, (void *)p);
-                        //whyat shud be my mode now
-                    }
-                }
-                else //i am participant
-                {
-
-                    if (pid <= (my_coord))
-                    {   //only send to valid coord
-                        p->set_state_req_in_progress(true);
-                        if (pid < (my_coord))
                             p->set_my_coordinator(pid);
 
-                        pthread_cancel(sr_response_thread);
-                        p->RemoveThreadFromSet(sr_response_thread);    //TODO: SC added this
-                        //create responder thread
-                        p->CreateThread(sr_response_thread, responder, (void *)p);
+                            pthread_cancel(sr_response_thread);
+                            p->RemoveThreadFromSet(sr_response_thread);    //TODO: SC added this
 
+                            p->CreateThread(sr_response_thread, responder, (void *)p);
+                            //whyat shud be my mode now
+                        }
+                    }
+                    else //i am participant
+                    {
+
+                        if (pid <= (my_coord))
+                        {   //only send to valid coord
+                            p->set_state_req_in_progress(true);
+                            if (pid < (my_coord))
+                                p->set_my_coordinator(pid);
+
+                            pthread_cancel(sr_response_thread);
+                            p->RemoveThreadFromSet(sr_response_thread);    //TODO: SC added this
+                            //create responder thread
+                            p->CreateThread(sr_response_thread, responder, (void *)p);
+
+                        }
+                    }
+                    //case1 can coord get State req.ya because later no longer coord
+                }
+                else if (type_req == kURElected)
+                {
+                    outf << "I am elected. my coord was " << my_coord << ", my id is " << p->get_pid() << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
+                    if (my_coord <= p->get_pid())
+                        continue;
+
+
+                    bool templ = false;
+                    pthread_mutex_lock(&new_coord_lock);
+                    if (!p->new_coord_thread_made)
+                    {
+                        p->new_coord_thread_made = true;
+                        templ = true;
+                    }
+
+                    pthread_mutex_unlock(&new_coord_lock);
+                    if (templ) {
+                        cout<<p->get_pid()<<"creating newcoord_thread"<<endl;
+
+                        p->CreateThread(p->newcoord_thread, NewCoordinatorMode, (void *)p);
+                    }
+
+                }
+                else if(type_req == kDecReq)
+                { //decreq
+                    timeval t;
+                    gettimeofday(&t, NULL);
+                    outf << "Dec req received; alive= " << p->get_alive_fd(pid) << " sdr=" << p->get_sdr_fd(pid) << "fd=" << p->get_fd(pid) << "at" << t.tv_sec << "," << t.tv_usec << endl;
+                    if (recvd_tid == p->get_transaction_id())
+                    {
+                        if (p->get_my_state() == COMMITTED || p->get_my_state() == ABORTED)
+                            p->SendDecision(pid);
+                    }
+                    else if (recvd_tid < p->get_transaction_id())
+                    {
+                        p->SendPrevDecision(pid, recvd_tid);
                     }
                 }
-                //case1 can coord get State req.ya because later no longer coord
+                else{
+                    string decision = type_req;
+                    
+
+                    // if(!(get_my_state()==COMMITTED || get_my_state() == ABORTED))
+                    // {
+                    //     cout << "P" << p->get_pid() << ": DecMsg received from P" << pid << ": ";
+                    //     if (decision == "0")
+                    //         cout << "Abort" << endl;
+                    //     else if (decision == "1")
+                    //         cout << "Commit" << endl;
+                    //     else
+                    //         cout << decision << endl;
+                    // }
+                    
+                    Decision dec = static_cast<Decision>(atoi(decision.c_str()));
+                    if (dec == COMMIT)
+                    {
+                    
+                        p->set_my_state(COMMITTED);
+                    }
+                    else if (dec== ABORT)
+                    {
+                        p->set_my_state(ABORTED);
+                    }
+
+                }
+
             }
-            else if (type_req == kURElected)
-            {
-                outf << "I am elected. my coord was " << my_coord << ", my id is " << p->get_pid() << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
-                if (my_coord <= p->get_pid())
-                    continue;
 
-
-
-                bool templ = false;
-                pthread_mutex_lock(&new_coord_lock);
-                if (!p->new_coord_thread_made)
-                {
-                    p->new_coord_thread_made = true;
-                    templ = true;
-                }
-
-                pthread_mutex_unlock(&new_coord_lock);
-                if (templ) {
-                    cout<<p->get_pid()<<"creating newcoord_thread"<<endl;
-
-                    p->CreateThread(p->newcoord_thread, NewCoordinatorMode, (void *)p);
-                }
-
-            }
-            else { //decreq
-                timeval t;
-                gettimeofday(&t, NULL);
-                outf << "Dec req received; alive= " << p->get_alive_fd(pid) << " sdr=" << p->get_sdr_fd(pid) << "fd=" << p->get_fd(pid) << "at" << t.tv_sec << "," << t.tv_usec << endl;
-                if (recvd_tid == p->get_transaction_id())
-                {
-                    if (p->get_my_state() == COMMITTED || p->get_my_state() == ABORTED)
-                        p->SendDecision(pid);
-                }
-                else if (recvd_tid < p->get_transaction_id())
-                {
-                    p->SendPrevDecision(pid, recvd_tid);
-                }
-            }
         }
         usleep(kGeneralSleep);
 

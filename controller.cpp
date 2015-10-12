@@ -197,7 +197,7 @@ void Controller::IncrementPorts(int p) {
     sdr_port_pid_map_.insert(make_pair(old_sdr + 1, p));
 
     auto it4 = up_port_pid_map_.find(old_up);
-    up_port_pid_map_.erase(it2);
+    up_port_pid_map_.erase(it4);
     up_port_pid_map_.insert(make_pair(old_up + 1, p));
 
     listen_port_[p]++;
@@ -433,7 +433,7 @@ int main() {
             c.InformCoordiantorOfParticipants(coord_id);
 
             c.SetMessageCount(0,8);
-            c.SetMessageCount(1,1);
+            c.SetMessageCount(1,2);
             c.SetMessageCount(2,1);
             c.SetMessageCount(3,1);
             c.SetMessageCount(4,1);
@@ -443,11 +443,14 @@ int main() {
             c.SetCoordHandshakeToInit3PC();
 
             sleep(7);
-            if (!c.ResurrectProcess(0)) return 1;
-            if (!c.ResurrectProcess(1)) return 1;
             if (!c.ResurrectProcess(2)) return 1;
+            if (!c.ResurrectProcess(3)) return 1;
             if (!c.ResurrectProcess(4)) return 1;
-
+            sleep(7);
+            if (!c.ResurrectProcess(1)) return 1;
+            sleep(5);
+            if (!c.ResurrectProcess(0)) return 1;
+            
             // if (!c.ResurrectProcess(0)) return 1;
             
         }
