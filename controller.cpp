@@ -158,12 +158,13 @@ bool Controller::CreateProcesses() {
     // creating N Process objects
     process_.resize(N);
     for (int i = 0; i < N; i++) {
-        process_[i].Initialize(i,
+        process_[i] = new Process;
+        process_[i]->Initialize(i,
                                kLogFile + to_string(i),
                                kPlaylistFile + to_string(i),
                                -1,
                                DONE);
-        if (pthread_create(&process_thread_[i], NULL, ThreadEntry, (void *)&process_[i])) {
+        if (pthread_create(&process_thread_[i], NULL, ThreadEntry, (void *)process_[i])) {
             cout << "C: ERROR: Unable to create thread for P" << i << endl;
             return false;
         }
@@ -206,17 +207,21 @@ void Controller::IncrementPorts(int p) {
     up_port_[p]++;
 }
 
+void Controller::FreeProcessMemory(int process_id) {
+    delete process_[process_id];
+}
 // revives a dead process by calling its Initializer
 // and creating a thread with ThreadEntry
 // adds the process to alive_process_ids_ set
 bool Controller::ResurrectProcess(int process_id) {
     IncrementPorts(process_id);
-    process_[process_id].Initialize(process_id,
+    process_[process_id] = new Process;
+    process_[process_id]->Initialize(process_id,
                                     kLogFile + to_string(process_id),
                                     kPlaylistFile + to_string(process_id),
                                     INT_MAX,
                                     RECOVERY);
-    if (pthread_create(&process_thread_[process_id], NULL, ThreadEntry, (void *)&process_[process_id])) {
+    if (pthread_create(&process_thread_[process_id], NULL, ThreadEntry, (void *)process_[process_id])) {
         cout << "C: ERROR: Unable to create thread for P" << process_id << endl;
         return false;
     }
@@ -254,18 +259,19 @@ string Controller::get_transaction(int transaction_id) {
 // cancels all threads created by the process
 // then, cancels the thread_entry thread for that process
 void Controller::KillProcess(int process_id) {
-    process_[process_id].CloseFDs();
-    process_[process_id].CloseSDRFDs();
-    process_[process_id].CloseUpFDs();
-    process_[process_id].CloseAliveFDs();
-    process_[process_id].Close_server_sockfd();
-    for (const auto &th : process_[process_id].thread_set) {
+    process_[process_id]->CloseFDs();
+    process_[process_id]->CloseSDRFDs();
+    process_[process_id]->CloseUpFDs();
+    process_[process_id]->CloseAliveFDs();
+    process_[process_id]->Close_server_sockfd();
+    for (const auto &th : process_[process_id]->thread_set) {
         pthread_cancel(th);
     }
-    for (const auto &th : process_[process_id].thread_set_alive_) {
+    for (const auto &th : process_[process_id]->thread_set_alive_) {
         pthread_cancel(th);
     }
     pthread_cancel(process_thread_[process_id]);
+    FreeProcessMemory(process_id);
     RemoveFromAliveProcessIds(process_id);
 }
 
@@ -278,7 +284,7 @@ void Controller::AddToAliveProcessIds(int process_id) {
 int Controller::ChooseCoordinator() {
     int coord_id = INT_MAX;
     for (const auto &p : alive_process_ids_) {
-        if (process_[p].get_my_status() == DONE) {
+        if (process_[p]->get_my_status() == DONE) {
             coord_id = std::min(coord_id, p);
         }
     }
@@ -290,8 +296,8 @@ int Controller::ChooseCoordinator() {
 // indicates to processes that it is time to enter ThreadEntry function
 void Controller::SetHandshakeToExpecting() {
     for (const auto &p : alive_process_ids_) {
-        if (process_[p].get_my_status() == DONE) {
-            process_[p].set_handshake(EXPECTING);
+        if (process_[p]->get_my_status() == DONE) {
+            process_[p]->set_handshake(EXPECTING);
         }
     }
 }
@@ -299,7 +305,7 @@ void Controller::SetHandshakeToExpecting() {
 // waits till handskake of all alive processess is READY
 void Controller::WaitTillHandshakeReady() {
     for (const auto &p : alive_process_ids_) {
-        if (process_[p].get_handshake() == READY) {
+        if (process_[p]->get_handshake() == READY) {
             continue;
         } else {
             usleep(kMiniSleep);
@@ -309,27 +315,28 @@ void Controller::WaitTillHandshakeReady() {
 
 // sets coordinator's handshake value to INIT3PC
 void Controller::SetCoordHandshakeToInit3PC() {
-    process_[get_coordinator()].set_handshake(INIT3PC);
+    process_[get_coordinator()]->set_handshake(INIT3PC);
 }
 
 // removes specified process from the alive_process_ids_ set
 void Controller::RemoveFromAliveProcessIds(int process_id) {
     if (alive_process_ids_.find(process_id) != alive_process_ids_.end()) {
         alive_process_ids_.erase(process_id);
+        FreeProcessMemory(process_id);
     }
 }
 
 // sets cooridinator's transaction_id
 void Controller::InformCoordinatorOfNewTransaction(int coord_id, int tid) {
-    process_[coord_id].set_transaction_id(tid);
+    process_[coord_id]->set_transaction_id(tid);
 }
 
 //Constructs Coordinator's participant_state_map_
 void Controller::InformCoordiantorOfParticipants(int coord_id) {
     for (const auto &p : alive_process_ids_) {
         if (p == coord_id) continue;
-        if (process_[p].get_my_status() == DONE ) {
-            process_[coord_id].participant_state_map_.insert(make_pair(p, UNINITIALIZED));
+        if (process_[p]->get_my_status() == DONE ) {
+            process_[coord_id]->participant_state_map_.insert(make_pair(p, UNINITIALIZED));
         } else {
             continue;
         }
@@ -340,9 +347,9 @@ void Controller::InformCoordiantorOfParticipants(int coord_id) {
 // also kills the alive threads of those processes
 void Controller::ResetProcesses(int coord_id) {
     for (const auto &p : alive_process_ids_) {
-        if (process_[p].get_my_status() == DONE ) {
-            process_[p].KillAliveThreads();
-            process_[p].Reset(coord_id);
+        if (process_[p]->get_my_status() == DONE ) {
+            process_[p]->KillAliveThreads();
+            process_[p]->Reset(coord_id);
         } else {
             continue;
         }
@@ -353,20 +360,21 @@ void Controller::ResetProcesses(int coord_id) {
 // removes them from alive_process_ids_ set
 void Controller::KillAllProcesses() {
     for (const auto &p : alive_process_ids_) {
-        process_[p].CloseFDs();
-        process_[p].CloseSDRFDs();
-        process_[p].CloseAliveFDs();
-        process_[p].Close_server_sockfd();
-        for (const auto &th : process_[p].thread_set) {
+        process_[p]->CloseFDs();
+        process_[p]->CloseSDRFDs();
+        process_[p]->CloseAliveFDs();
+        process_[p]->Close_server_sockfd();
+        for (const auto &th : process_[p]->thread_set) {
             pthread_cancel(th);
         }
-        for (const auto &th : process_[p].thread_set_alive_) {
+        for (const auto &th : process_[p]->thread_set_alive_) {
             pthread_cancel(th);
         }
         pthread_cancel(process_thread_[p]);
     }
 
     for (const auto &p : alive_process_ids_) {
+        FreeProcessMemory(p);
         RemoveFromAliveProcessIds(p);
     }
 }
@@ -388,7 +396,7 @@ void Controller::ResurrectAll() {
 
 // sets num_messages_ value for the given process
 void Controller::SetMessageCount(int process_id, float num_messages) {
-    process_[process_id].set_num_messages(num_messages);
+    process_[process_id]->set_num_messages(num_messages);
 }
 
 bool InitializeLocks() {
@@ -433,11 +441,12 @@ int main() {
             c.SetHandshakeToExpecting();
             c.WaitTillHandshakeReady();
             c.SetCoordHandshakeToInit3PC();
-            
+
             sleep(7);
             if (!c.ResurrectProcess(0)) return 1;
             if (!c.ResurrectProcess(1)) return 1;
             if (!c.ResurrectProcess(2)) return 1;
+            if (!c.ResurrectProcess(4)) return 1;
 
             // if (!c.ResurrectProcess(0)) return 1;
             

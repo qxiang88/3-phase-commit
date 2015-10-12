@@ -556,16 +556,16 @@ void Process::Vote(string trans) {
     if (transaction_type == kAdd) {
         if (playlist_.find(song_name) != playlist_.end()) {
             // song_name already exists. Vote NO
-            my_state_ = ABORTED;
+            set_my_state(ABORTED);
         } else {
-            my_state_ = UNCERTAIN;
+            set_my_state(UNCERTAIN);
         }
     } else if (transaction_type == kRemove) {
         if (playlist_.find(song_name) == playlist_.end()) {
             // song_name does not exist. Vote NO
-            my_state_ = ABORTED;
+            set_my_state(ABORTED);
         } else {
-            my_state_ = UNCERTAIN;
+            set_my_state(UNCERTAIN);
         }
     } else if (transaction_type == kEdit) {
         string new_name, new_url;
@@ -573,16 +573,16 @@ void Process::Vote(string trans) {
         iss >> new_url;
         if (playlist_.find(song_name) == playlist_.end()) {
             // song_name does not exist. Vote NO
-            my_state_ = ABORTED;
+            set_my_state(ABORTED);
         } else {
             // song_name exists.
             // Check if the new_name already exists
             if (playlist_.find(new_name) != playlist_.end()) {
                 //new_name already exists. Can't edit. Vote NO
-                my_state_ = ABORTED;
+                set_my_state(ABORTED);
             } else {
                 // song_name can be edited to new_name and new_url. Vote YES
-                my_state_ = UNCERTAIN;
+                set_my_state(UNCERTAIN);
             }
         }
     }
@@ -608,6 +608,7 @@ void Process::DecrementNumMessages() {
 // removes itself from Controller's alive process set
 // kills itself
 void Process::Die() {
+    usleep(kKillSleep);
     set_my_status(DYING);
     for (const auto &th : thread_set) {
         pthread_cancel(th);
@@ -621,6 +622,7 @@ void Process::Die() {
     CloseAliveFDs();
     Close_server_sockfd();
     RemoveFromAliveProcessIds(pthread_self());
+    // FreeProcessMemory(get_pid());
     pthread_cancel(pthread_self());
 }
 

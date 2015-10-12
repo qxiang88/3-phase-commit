@@ -357,7 +357,7 @@ void* ReceiveAckFromParticipant(void* _rcv_thread_arg) {
                 rcv_thread_arg->received_msg_type = ACK;
             } else {
                 //TODO: take actions appropriately, like check log for previous transaction decision.
-                cout << "P" << p->get_pid() << ": Unexpected msg received from P" << pid << endl;
+                cout << "P" << p->get_pid() << ": Unexpected msg received from P" << pid << buf << endl;
                 rcv_thread_arg->received_msg_type = ERROR;
             }
         }
@@ -517,12 +517,12 @@ void Process::CoordinatorMode() {
             break;
         }
     }
-    if (my_state_ == ABORTED)
+    if (get_my_state() == ABORTED)
         abort = true;
 
     if (abort) {
         LogAbort();
-        my_state_ = ABORTED;
+        set_my_state(ABORTED);
 
         // send ABORT message to all participants which voted YES
         for (const auto& ps : participant_state_map_) {
@@ -538,11 +538,11 @@ void Process::CoordinatorMode() {
         WaitForAck();
         // return;
         LogCommit();
-        my_state_ = COMMITTED;
+        set_my_state(COMMITTED);
         SendCommitToAll();
     }
 
-    if (my_state_ == ABORTED)
+    if (get_my_state() == ABORTED)
         prev_decisions_.push_back(ABORT);
     else
         prev_decisions_.push_back(COMMIT);

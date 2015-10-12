@@ -209,9 +209,7 @@ void* ReceiveStateOrDecReq(void* _arg) {
             else if (type_req == kURElected)
             {
                 outf << "I am elected. my coord was " << my_coord << ", my id is " << p->get_pid() << "at " << temptime.tv_sec << ", " << temptime.tv_usec << endl;
-                if (my_coord == p->get_pid())
-                    continue;
-                if (my_coord < pid)
+                if (my_coord <= p->get_pid())
                     continue;
 
 
@@ -243,7 +241,6 @@ void* ReceiveStateOrDecReq(void* _arg) {
                 }
                 else if (recvd_tid < p->get_transaction_id())
                 {
-                    // if(my_state_==COMMITTED || my_state_==ABORTED)
                     p->SendPrevDecision(pid, recvd_tid);
                 }
             }
@@ -277,6 +274,14 @@ void* responder(void *_p) {
         else {
             p->LogPreCommit();
             p->SendMsgToCoordinator(kAck);
+            p->ReceiveCommitFromCoordinator();
+            if (p->get_my_state() == COMMITTABLE) {
+                p->set_state_req_in_progress(false);
+                p->Timeout();
+            }
+            else {
+                p->LogCommit();
+            }
             // cout << p->get_pid() << " sent ack to coord at " << time(NULL) % 100 << endl;
         }
     }

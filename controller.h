@@ -32,6 +32,8 @@ public:
     void KillLeader();
     void ResurrectAll();
     void SetMessageCount(int process_id, float num_messages);
+    void FreeProcessMemory(int process_id);
+
 
 
 
@@ -74,7 +76,7 @@ private:
     static std::map<int, int> up_port_pid_map_;
 
     // Process object's pointer for each process
-    std::vector<Process> process_;
+    std::vector<Process*> process_;
     // vector of threads for each process
     std::vector<pthread_t> process_thread_;
     static std::vector<string> transaction_;

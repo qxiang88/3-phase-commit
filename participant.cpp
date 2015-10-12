@@ -98,8 +98,7 @@ int Process::WaitForVoteReq(string &transaction_msg) {
         ret = INT_MAX;
         // pthread_exit(NULL);
     } else if (rv == 0) {   //timeout
-        cout << "TIMEOUT" << endl;
-        // my_state_ = ABORTED;
+        // cout << "TIMEOUT" << endl;
         RemoveFromUpSet(pid);
         ret = INT_MAX;
     } else {    // activity happened on the socket
@@ -115,7 +114,6 @@ int Process::WaitForVoteReq(string &transaction_msg) {
             // if coordinator closes connection, it is equivalent to coordinator crashing
             // can treat it as TIMEOUT
             // TODO: verify argument
-            // my_state_ = ABORTED;
             RemoveFromUpSet(pid);
             ret = INT_MAX;
             //TODO: handle connection close based on different cases
@@ -206,9 +204,9 @@ void Process::ReceivePreCommitOrAbortFromCoordinator() {
             ExtractMsg(string(buf), extracted_msg, received_tid);
             if (extracted_msg == kPreCommit && received_tid == transaction_id_) {
                 // making sure msg is for the curr transaction and not a future one
-                my_state_ = COMMITTABLE;
+                set_my_state(COMMITTABLE);
             } else if (extracted_msg == kAbort && received_tid == transaction_id_) {
-                my_state_ = ABORTED;
+                set_my_state(ABORTED);
             } else {
                 //TODO: take actions appropriately, like check log for previous transaction decision.
                 cout << "P" << get_pid() << ": Unexpected msg received from P" << pid << endl;
@@ -264,11 +262,11 @@ void Process::ReceiveAnythingFromCoordinator() {
             ExtractMsg(string(buf), extracted_msg, received_tid);
             if (extracted_msg == kPreCommit && received_tid == transaction_id_) {
                 // making sure msg is for the curr transaction and not a future one
-                my_state_ = COMMITTABLE;
+                set_my_state(COMMITTABLE);
             } else if (extracted_msg == kAbort && received_tid == transaction_id_) {
-                my_state_ = ABORTED;
+                set_my_state(ABORTED);
             } else  if (extracted_msg == kCommit && received_tid == transaction_id_) {
-                my_state_ = COMMITTED;
+                set_my_state(COMMITTED);
             } else {
                 //TODO: take actions appropriately, like check log for previous transaction decision.
                 cout << "P" << get_pid() << ": Unexpected msg received from P" << pid << endl;
@@ -324,7 +322,7 @@ void Process::ReceiveCommitFromCoordinator() {
             ExtractMsg(string(buf), extracted_msg, received_tid);
             if (extracted_msg == kCommit && received_tid == transaction_id_) {
                 // making sure msg is for the curr transaction and not a future one
-                my_state_ = COMMITTED;
+                set_my_state(COMMITTED);
             } else {
                 //TODO: take actions appropriately, like check log for previous transaction decision.
                 cout << "P" << get_pid() << ": Unexpected msg received from P" << pid << endl;
@@ -414,7 +412,7 @@ void Process::ParticipantMode() {
         }
     }
 
-    if (my_state_ == ABORTED) {
+    if (get_my_state() == ABORTED) {
         //ignore log as doesnt matter when participant doesnt get votereq
         return;
     }
@@ -425,7 +423,7 @@ void Process::ParticipantMode() {
     Vote(transaction_msg);
     // Print();
 
-    if (my_state_ ==  ABORTED)
+    if (get_my_state() ==  ABORTED)
     {   //participant's vote was NO
         SendMsgToCoordinator(kNo);
         LogAbort();
@@ -436,14 +434,14 @@ void Process::ParticipantMode() {
         SendMsgToCoordinator(kYes);
         ReceivePreCommitOrAbortFromCoordinator();
 
-        if (my_state_ == COMMITTABLE)
+        if (get_my_state() == COMMITTABLE)
         {   // coord sent PRE-COMMIT
             LogPreCommit();
             SendMsgToCoordinator(kAck);
             // cout<<pid_<<" sent ack to coord at "<<time(NULL)%100<<endl;
             ReceiveCommitFromCoordinator();
             //this detects timeout, exits and state will be the same as intial
-            if (my_state_ == COMMITTED)
+            if (get_my_state() == COMMITTED)
             {
                 LogCommit();
             }
@@ -455,7 +453,7 @@ void Process::ParticipantMode() {
             }
         }
 
-        else if (my_state_ == ABORTED)
+        else if (get_my_state() == ABORTED)
         {   // coord sent ABORT
             LogAbort();
         }
@@ -479,7 +477,7 @@ void Process::ParticipantMode() {
 
 
 //TODO: when participant recovers, make sure that it ignores STATE-REQ from new coord
-    while (!(my_state_ == ABORTED || my_state_ == COMMITTED))
+    while (!(get_my_state() == ABORTED || get_my_state() == COMMITTED))
     {
         //what does this thread do while timeout() waiting for SR thread to respond.
         //maybe i can just do, wait till a decision is made by SR thread
@@ -490,7 +488,7 @@ void Process::ParticipantMode() {
         //else, we have to log abort or commit in SR thread receiving part
         usleep(kGeneralSleep);
     }
-    if (my_state_ == ABORTED)
+    if (get_my_state() == ABORTED)
     {
         prev_decisions_.push_back(ABORT);
     }

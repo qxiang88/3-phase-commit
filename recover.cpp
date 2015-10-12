@@ -104,19 +104,19 @@ void Process::Recovery()
 
     if (decision == "commit")
     {
-        my_state_ = COMMITTED;
+        set_my_state(COMMITTED);
         cout << "Had received commit" << endl;
     }
 
     else if (decision == "abort")
     {
-        my_state_ = ABORTED;
+        set_my_state(ABORTED);
         cout << "Had received abort" << endl;
     }
 
     else if (decision == "precommit")
     {
-        my_state_ = COMMITTABLE;
+        set_my_state(COMMITTABLE);
         SetUpAndWaitRecovery();
         LogCommitOrAbort();
 
@@ -140,14 +140,14 @@ void Process::Recovery()
         if (vote == "yes")
         {
             cout << "Had voted yes" << endl;
-            my_state_ = UNCERTAIN;
+            set_my_state(UNCERTAIN);
             SetUpAndWaitRecovery();
             LogCommitOrAbort();
         }
         else if (vote.empty())
         {
             cout << "Hadnt voted. So aborting" << endl;
-            my_state_ = ABORTED;
+            set_my_state(ABORTED);
             LogAbort();
         }
     }
@@ -264,12 +264,12 @@ int Process::GetNewCoordinator()
 void Process::SetUpAndWaitRecovery()
 {
     pthread_t decision_request_thread, total_failure_thread;
-    // CreateThread(decision_request_thread, SendDecReq, (void *)this);
+    CreateThread(decision_request_thread, SendDecReq, (void *)this);
     CreateThread(total_failure_thread, SendUpReq, (void *)this);
     void* status;
-    // pthread_join(decision_request_thread, &status);
+    pthread_join(decision_request_thread, &status);
     pthread_join(total_failure_thread, &status);
-    // RemoveThreadFromSet(decision_request_thread);
+    RemoveThreadFromSet(decision_request_thread);
     RemoveThreadFromSet(total_failure_thread);
 }
 

@@ -61,9 +61,9 @@ void Process::SendDecision(int recp)
 {
     string msg;
     int code_to_send;
-    if (my_state_ == COMMITTED)
+    if (get_my_state() == COMMITTED)
         code_to_send = COMMIT;
-    else if (my_state_ == ABORTED)
+    else if (get_my_state() == ABORTED)
         code_to_send = ABORT;
     string msg_to_send = to_string(code_to_send);
     ConstructGeneralMsg(msg_to_send, transaction_id_, msg);
