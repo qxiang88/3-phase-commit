@@ -444,14 +444,14 @@ int main() {
             c.SetCoordHandshakeToInit3PC();
 
             // sleep(7);
-            if(t==1)
-                {
-                    if (!c.ResurrectProcess(1)) return 1;   
-                }
+            // if(t==1)
+            //     {
+            //         if (!c.ResurrectProcess(1)) return 1;   
+            //     }
             // if (!c.ResurrectProcess(1)) return 1;
             // if (!c.ResurrectProcess(3)) return 1;
-            // sleep(7);
-            // if (!c.ResurrectProcess(2)) return 1;
+            sleep(7);
+            if (!c.ResurrectProcess(1)) return 1;
             // sleep(5);
             // if (!c.ResurrectProcess(4)) return 1;
 
@@ -474,6 +474,7 @@ int main() {
             // // if (!c.ResurrectProcess(0)) return 1;
             
         }
+        break;
         usleep(kTransactionSleep);
         t++;
     }

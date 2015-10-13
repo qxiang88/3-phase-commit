@@ -1,0 +1,15 @@
+0 1 2 3 4
+      3 4
+      	4
+
+0 1 
+0 1 2
+0 1 2 3
+0 1 2 3 4
+ups
+0 1 2 3 4
+0 1 2 3 4   int;0 1 2 3 4 not subset of alive
+0 1 2 3 4
+  	  3 4
+  	    4 	if someone doesnt add himself, then return. not tf
+

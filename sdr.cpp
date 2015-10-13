@@ -127,9 +127,14 @@ void* ReceiveStateOrDecReq(void* _arg) {
         cout << "Failed to open log file for sdr" << endl;
 
     while (true) {
+
         // currently, this loop sleeps at the end for kGeneralSleep
         // TODO: confirm whether this is the right amount of sleep
         // cout<<"$$$$P"<<p->get_pid()<<"sdr_fd"<<pid<<p->get_sdr_fd(pid)<<endl;
+        pthread_testcancel();
+        if(p->get_my_status() == DYING)
+            break;
+
         while (p->get_sdr_fd(pid) == -1) {
             usleep(kMiniSleep);
         }
