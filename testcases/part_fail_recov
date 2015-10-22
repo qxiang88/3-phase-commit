@@ -1,0 +1,8 @@
+c.SetMessageCount(1,1);
+
+c.SetHandshakeToExpecting();
+c.WaitTillHandshakeReady();
+c.SetCoordHandshakeToInit3PC();
+
+sleep(7);
+if (!c.ResurrectProcess(1)) return 1;

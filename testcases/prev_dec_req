@@ -1,0 +1,12 @@
+ 
+            if(t==0)c.SetMessageCount(1,1);
+
+            c.SetHandshakeToExpecting();
+            c.WaitTillHandshakeReady();
+            c.SetCoordHandshakeToInit3PC();
+
+            if(t==1)
+                {
+                    if (!c.ResurrectProcess(1)) return 1;   
+                }
+            
